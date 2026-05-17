@@ -67,37 +67,27 @@ Final board (row ↑, col →):
 
 ```
 Denomination/
-├── src/
-│   ├── denomination_game.py   Interactive pygame implementation of the puzzle
-│   └── denomination_ilp.py    ILP solver (scipy / HiGHS — no commercial solver)
+├── README.md                     # full description, formulation, citation
+├── LICENSE                       
+├── AUTHORS                       
+├── model/
+│   └── denomination_ilp.py       # formulation of MILP 
+├── game/
+│   └── denomination_game.py      #interactive pygame version of denomination
 ├── results/
-│   └── kmax_table.csv         Optimal k_max values by grid size
-├── AUTHORS
-├── LICENSE
-└── README.md
+│   └── kmax_table.csv            # updated with verified optimal values
+├── rules/                       
+└── rules_denomination.pdf                 
 ```
 
-### `src/denomination_game.py`
+### `game/denomination_game.py`
 
 An interactive implementation of Denomination using
 [pygame](https://www.pygame.org/).
 The game opens with a **start screen** where you type the desired grid
-dimensions (any *m* × *n* with *m*, *n* ≤ 9) or choose a preset.
+dimensions (any *m* × *n* with *m*, *n* ≤ 10) 
 
-**Controls**
-
-| Key | Action |
-|-----|--------|
-| Left-click | Select / deselect a cell |
-| **N** | Place a null stone on the selected cell |
-| **Space / Enter** | Place a non-null stone on the selected cell |
-| **H** | Toggle hint overlay (green = valid null, amber = valid non-null + prospective denomination) |
-| **U** | Undo last move |
-| **R** | Reset the board |
-| **M** | Return to the start menu |
-| **Q / Escape** | Quit |
-
-### `src/denomination_ilp.py`
+### `model/denomination_ilp.py`
 
 An Integer Linear Programme that finds the optimal *k*_max on an *m* × *n* grid.
 The solver uses `scipy.optimize.milp`, which wraps the open-source
