@@ -1,431 +1,240 @@
 """
 denomination_ilp.py
-===================
-Solves the Denomination puzzle using Integer Linear Programming (ILP).
-Implemented with scipy.optimize.milp, which wraps the open-source HiGHS
-solver — no commercial licence is required.
 
-This script is designed to accompany the paper:
-    Sarda, P. and Singh, B. (submitted).
-    "Denomination: A Grid Placement Puzzle for Teaching Discrete Optimization."
-    INFORMS Transactions on Education.
+Solve the Denomination puzzle on an m x n king graph using a correct MILP.
+Uses scipy.optimize.milp (HiGHS solver) – no commercial license required.
 
-How to run
-----------
-    python denomination_ilp.py               # interactive prompts
-    python denomination_ilp.py 3 3           # solve 3×3 directly
-    python denomination_ilp.py 3 3 120       # with 120-second time limit
-
-Puzzle rules
-------------
-A null stone (denomination 1) may be placed on cell v only when every
-king-graph neighbour of v is empty.  Denomination 1 arises ONLY as a null
-stone — the sum rule below cannot produce it.
-
-A non-null stone (denomination k > 1) may be placed on empty cell v when:
-  (a) the sum of the denominations of v's already-placed neighbours equals k,
-  (b) every denomination 1, 2, …, k-1 already appears on the grid.
-
-The objective is to maximise k_max, the highest denomination placed.
-
-ILP formulation
----------------
-Decision variables
-  d[c]        ∈ {0, …, K}  denomination at cell c  (0 = empty)
-  null[c]     ∈ {0, 1}     1 if c holds a null stone
-  occ[c]      ∈ {0, 1}     1 if c is occupied
-  tau[c]      ∈ {0, …, N}  placement time of c (0 = unoccupied)
-  b[c, nb]    ∈ {0, 1}     1 if neighbour nb is placed before c
-  w[c, nb]    ∈ {0, …, K}  McCormick linearisation of  d[nb] · b[c, nb]
-  yn[c]       ∈ {0, …, K}  McCormick linearisation of  d[c]  · null[c]
-  p[c, k]     ∈ {0, 1}     indicator that  d[c] = k
-  present[k]  ∈ {0, 1}     1 if denomination k appears on the grid
-  ismax[c]    ∈ {0, 1}     1 if c achieves k_max
-  kmax        ∈ {0, …, K}  objective variable
-
-Key constraint groups
-  Occupation        occ[c] ≤ d[c] ≤ K · occ[c]
-  Null denom = 1    null[c] ≤ d[c] ≤ 1 + K(1 − null[c])
-  Null indep. set   null[c] + null[nb] ≤ 1        for each king edge
-  Sum rule          Σ_nb w[c,nb] + yn[c] = d[c]
-  McCormick w       w = b · d[nb]                 (four inequalities)
-  McCormick yn      yn = null · d                 (three inequalities)
-  Null no-pred.     b[c,nb] + null[c] ≤ 1
-  Ordering (big-M)  tau variables enforce b[c,nb] = 1 ⟺ tau[nb] < tau[c]
-  Indicators        Σ_k k · p[c,k] = d[c];  null[c] ≥ p[c,1]
-  Sequencing        present[k] ≤ present[k−1]     for k = 2, …, K
-
-Reference for McCormick envelopes
-    McCormick, G.P. (1976). Computability of global solutions to factorable
-    nonconvex programs: Part I. Mathematical Programming 10(1): 147–175.
+Usage:
+    python denomination_ilp.py --m 3 --n 3 --time-limit 120
 """
 
-import sys
-import time
-import warnings
-
+import argparse
 import numpy as np
 from scipy.optimize import milp, LinearConstraint, Bounds
-from scipy.sparse import lil_matrix
+from scipy.sparse import csr_matrix, lil_matrix
+from itertools import product
+import time
+import sys
 
-
-# ---------------------------------------------------------------------------
-# King-graph neighbour helper
-# ---------------------------------------------------------------------------
-
-def king_nbrs(i, j, m, n):
-    """Return all king-graph neighbours of cell (i, j) on an m×n grid."""
-    return [
-        (i + di, j + dj)
-        for di in (-1, 0, 1)
-        for dj in (-1, 0, 1)
-        if (di, dj) != (0, 0)
-        and 0 <= i + di < m
-        and 0 <= j + dj < n
-    ]
-
-
-# ---------------------------------------------------------------------------
-# Build the ILP
-# ---------------------------------------------------------------------------
-
-def build_ilp(m, n, K):
+def solve_denomination(m: int, n: int, time_limit: float = 120.0):
     """
-    Construct all ILP data for an m×n king-graph Denomination puzzle.
-
-    Parameters
-    ----------
-    m, n : int   grid dimensions (0-indexed rows, columns internally)
-    K    : int   denomination upper bound  (use m*n as a safe default)
-
-    Returns
-    -------
-    c_obj  : 1-D array   objective vector (minimise − k_max)
-    A      : csr_matrix  constraint matrix
-    lb, ub : 1-D arrays  row bounds  lb ≤ A·x ≤ ub
-    x_lo, x_hi : 1-D arrays  variable bounds
-    integrality : 1-D array  1 = integer, 0 = continuous
-    idx    : dict  variable name → column index
+    Solve Denomination puzzle on an m x n king graph.
+    
+    Returns:
+        k_max (int or None): optimal highest denomination (or best found)
+        assignment (dict): mapping (i,j) -> denomination (0 if empty)
+        solve_time (float): seconds taken
+        status (str): 'Optimal', 'Time limit', or 'Infeasible'
     """
     cells = [(i, j) for i in range(m) for j in range(n)]
-    NB    = {c: king_nbrs(*c, m, n) for c in cells}
-    N     = m * n                # placement-time big-M
-    BK    = float(K)
-    BN    = float(N)
-    BN1   = float(N + 1)
-    INF   = np.inf
+    V = len(cells)
+    K = m * n                     # safe upper bound, can be reduced for speed
 
-    # ------------------------------------------------------------------
-    # 1.  Assign a column index to every variable
-    # ------------------------------------------------------------------
-    idx = {}
-    col = 0
+    # Build neighbour list (king graph)
+    neighbours = {}
+    for i, j in cells:
+        neigh = []
+        for di, dj in product((-1, 0, 1), repeat=2):
+            if di == 0 and dj == 0:
+                continue
+            ni, nj = i + di, j + dj
+            if 0 <= ni < m and 0 <= nj < n:
+                neigh.append((ni, nj))
+        neighbours[(i, j)] = neigh
 
-    for c in cells:
-        for tag in ("d", "null", "occ", "tau", "yn", "ismax"):
-            idx[(tag, c)] = col;  col += 1
-        for nb in NB[c]:
-            idx[("b", c, nb)] = col;  col += 1    # ordering binary
-            idx[("w", c, nb)] = col;  col += 1    # McCormick product
+    max_deg = max(len(neighbours[c]) for c in cells)
+    M = max_deg * K + 1           # big-M constant
 
+    # Variable indexing
+    # x[v, k] for v in 0..V-1, k in 1..K
+    # y[k] for k in 1..K
+    n_x = V * K
+    n_y = K
+    n_vars = n_x + n_y
+
+    def idx_x(v, k):
+        return v * K + (k - 1)
+
+    def idx_y(k):
+        return n_x + (k - 1)
+
+    # Objective: maximise sum y_k  -> minimise -sum y_k
+    c = np.zeros(n_vars)
     for k in range(1, K + 1):
-        idx[("pr", k)] = col;  col += 1            # present[k]
-        for c in cells:
-            idx[("p", c, k)] = col;  col += 1      # p[c, k]
+        c[idx_y(k)] = -1.0
 
-    idx["kmax"] = col;  col += 1
-    nv = col
+    # Build constraints as a list of rows (dense, then convert to sparse)
+    A_rows = []
+    lb_rows = []
+    ub_rows = []
 
-    # ------------------------------------------------------------------
-    # 2.  Variable bounds and integrality
-    # ------------------------------------------------------------------
-    x_lo = np.zeros(nv)
-    x_hi = np.full(nv, BK)
-    intg = np.ones(nv, dtype=int)
+    # 1) One denomination per cell
+    for v in range(V):
+        row = np.zeros(n_vars)
+        for k in range(1, K + 1):
+            row[idx_x(v, k)] = 1.0
+        A_rows.append(row)
+        lb_rows.append(-np.inf)
+        ub_rows.append(1.0)
 
-    for c in cells:
-        for tag in ("null", "occ", "ismax"):
-            x_hi[idx[(tag, c)]] = 1.0
-        x_hi[idx[("tau", c)]] = BN
-        for nb in NB[c]:
-            x_hi[idx[("b", c, nb)]] = 1.0
+    # 2) Null stone independence (no two adjacent nulls)
+    for u in cells:
+        for v in neighbours[u]:
+            if (u[0], u[1]) < (v[0], v[1]):   # each edge once
+                row = np.zeros(n_vars)
+                row[idx_x(cells.index(u), 1)] = 1.0
+                row[idx_x(cells.index(v), 1)] = 1.0
+                A_rows.append(row)
+                lb_rows.append(-np.inf)
+                ub_rows.append(1.0)
 
+    # 3) Neighbourhood sum rule (for each cell and each k >= 2)
+    for v_idx, v in enumerate(cells):
+        for k in range(2, K + 1):
+            # contrib = sum_{u in N(v)} sum_{ell=1}^{k-1} ell * x_{u,ell}
+            # Lower: contrib >= k - M*(1 - x_{v,k})
+            # Upper: contrib <= k + M*(1 - x_{v,k})
+            row_lower = np.zeros(n_vars)
+            row_upper = np.zeros(n_vars)
+            for u in neighbours[v]:
+                u_idx = cells.index(u)
+                for ell in range(1, k):
+                    row_lower[idx_x(u_idx, ell)] = ell
+                    row_upper[idx_x(u_idx, ell)] = ell
+            # Lower bound: contrib - M*x_{v,k} >= k - M
+            row_lower[idx_x(v_idx, k)] = -M
+            # Upper bound: contrib + M*x_{v,k} <= k + M
+            row_upper[idx_x(v_idx, k)] = M
+
+            A_rows.append(row_lower)
+            lb_rows.append(k - M)
+            ub_rows.append(np.inf)
+
+            A_rows.append(row_upper)
+            lb_rows.append(-np.inf)
+            ub_rows.append(k + M)
+
+    # 4) Appearance: y_k <= sum_v x_{v,k}  and  sum_v x_{v,k} <= V * y_k
     for k in range(1, K + 1):
-        x_hi[idx[("pr", k)]] = 1.0
-        for c in cells:
-            x_hi[idx[("p", c, k)]] = 1.0
+        # y_k - sum_v x_{v,k} <= 0
+        row1 = np.zeros(n_vars)
+        row1[idx_y(k)] = 1.0
+        for v in range(V):
+            row1[idx_x(v, k)] = -1.0
+        A_rows.append(row1)
+        lb_rows.append(-np.inf)
+        ub_rows.append(0.0)
 
-    x_hi[idx["kmax"]] = BK
+        # sum_v x_{v,k} - V*y_k <= 0
+        row2 = np.zeros(n_vars)
+        for v in range(V):
+            row2[idx_x(v, k)] = 1.0
+        row2[idx_y(k)] = -V
+        A_rows.append(row2)
+        lb_rows.append(-np.inf)
+        ub_rows.append(0.0)
 
-    # ------------------------------------------------------------------
-    # 3.  Objective: minimise −k_max
-    # ------------------------------------------------------------------
-    c_obj = np.zeros(nv)
-    c_obj[idx["kmax"]] = -1.0
+    # 5) Contiguity: y_k >= y_{k+1}  -> y_{k+1} - y_k <= 0
+    for k in range(1, K):
+        row = np.zeros(n_vars)
+        row[idx_y(k + 1)] = 1.0
+        row[idx_y(k)] = -1.0
+        A_rows.append(row)
+        lb_rows.append(-np.inf)
+        ub_rows.append(0.0)
 
-    # ------------------------------------------------------------------
-    # 4.  Constraints
-    #     Each row is a triple (coefficient_value_list, lb, ub).
-    # ------------------------------------------------------------------
-    rows = []
+    # 6) Link: x_{v,k} <= y_k  -> x_{v,k} - y_k <= 0
+    for v in range(V):
+        for k in range(1, K + 1):
+            row = np.zeros(n_vars)
+            row[idx_x(v, k)] = 1.0
+            row[idx_y(k)] = -1.0
+            A_rows.append(row)
+            lb_rows.append(-np.inf)
+            ub_rows.append(0.0)
 
-    def row(cv, lo, hi):
-        rows.append((cv, lo, hi))
+    # 7) At least one null stone: y_1 = 1
+    row = np.zeros(n_vars)
+    row[idx_y(1)] = 1.0
+    A_rows.append(row)
+    lb_rows.append(1.0)
+    ub_rows.append(1.0)
 
-    def eq(cv, val):
-        rows.append((cv, val, val))
+    # Build sparse matrix
+    A = csr_matrix(np.vstack(A_rows))
 
-    for c in cells:
-        dc = idx[("d",     c)]
-        nc = idx[("null",  c)]
-        oc = idx[("occ",   c)]
-        tc = idx[("tau",   c)]
-        yn = idx[("yn",    c)]
-        im = idx[("ismax", c)]
-        km = idx["kmax"]
+    # Variable bounds: all binary
+    x_low = np.zeros(n_vars)
+    x_high = np.ones(n_vars)
+    integrality = np.ones(n_vars, dtype=int)
 
-        # Occupation: occ ≤ d ≤ K·occ
-        row([(dc, 1), (oc, -BK)], -INF, 0)
-        row([(oc, 1), (dc, -1)],  -INF, 0)
+    # Solve
+    start = time.time()
+    res = milp(
+        c,
+        constraints=LinearConstraint(A, lb_rows, ub_rows),
+        integrality=integrality,
+        bounds=Bounds(x_low, x_high),
+        options={"time_limit": time_limit, "mip_rel_gap": 0.0},
+    )
+    elapsed = time.time() - start
 
-        # Null stone forces d = 1
-        row([(nc, 1), (dc, -1)],      -INF, 0)
-        row([(dc, 1), (nc,  BK)],     -INF, 1 + BK)
+    if res.status == 0:          # Optimal
+        status = "Optimal"
+    elif res.status == 1:        # Time limit
+        status = "Time limit"
+    else:
+        status = f"Infeasible/unbounded (status {res.status})"
+        return None, None, elapsed, status
 
-        # Sum rule: Σ_nb w[c,nb] + yn[c] = d[c]
-        eq([(dc, -1), (yn, 1)] + [(idx[("w", c, nb)], 1) for nb in NB[c]], 0)
+    # Extract assignment
+    assignment = {}
+    for v_idx, cell in enumerate(cells):
+        for k in range(1, K + 1):
+            if np.abs(res.x[idx_x(v_idx, k)] - 1.0) < 0.5:
+                assignment[cell] = k
+                break
+        else:
+            assignment[cell] = 0
 
-        # McCormick  yn = null · d[c]
-        row([(yn, 1), (nc, -BK)],            -INF, 0)    # yn ≤ K·null
-        row([(yn, 1), (dc, -1)],             -INF, 0)    # yn ≤ d
-        row([(yn, 1), (dc, -1), (nc, -BK)],  -BK, INF)  # yn ≥ d − K(1−null)
-
-        # Placement-time occupancy: occ ≤ tau ≤ N·occ
-        row([(tc, 1), (oc, -1)],  0, INF)
-        row([(tc, 1), (oc, -BN)], -INF, 0)
-
-        # Null stone has no predecessors: b[c,nb] ≤ 1 − null[c]
-        for nb in NB[c]:
-            row([(idx[("b", c, nb)], 1), (nc, 1)], -INF, 1)
-
-        for nb in NB[c]:
-            d2 = idx[("d",   nb)]
-            o2 = idx[("occ", nb)]
-            t2 = idx[("tau", nb)]
-            bc = idx[("b",   c, nb)]
-            ww = idx[("w",   c, nb)]
-
-            # McCormick  w[c,nb] = b[c,nb] · d[nb]
-            row([(ww, 1), (bc, -BK)],           -INF, 0)   # w ≤ K·b
-            row([(ww, 1), (d2, -1)],            -INF, 0)   # w ≤ d[nb]
-            row([(ww, 1), (d2, -1), (bc, -BK)], -BK, INF)  # w ≥ d[nb]−K(1−b)
-
-            # b = 0 if nb is unoccupied
-            row([(bc, 1), (o2, -1)], -INF, 0)
-
-            # Big-M ordering: b=1 ⟹ tau[c] > tau[nb]
-            row([(tc, 1), (t2, -1), (bc, -BN)],              1 - BN, INF)
-            # Big-M ordering: b=0 ⟹ tau[nb] > tau[c]  (relaxed for empty cells)
-            row([(t2, 1), (tc, -1), (bc, BN1),
-                 (oc, -BN1), (o2, -BN1)],         1 - 2*BN1, INF)
-
-        # Denomination indicators
-        eq([(dc, -1)] + [(idx[("p", c, k)], float(k)) for k in range(1, K+1)], 0)
-        eq([(oc, -1)] + [(idx[("p", c, k)], 1.0)      for k in range(1, K+1)], 0)
-
-        # Denomination 1 may ONLY appear as a null stone
-        row([(nc, 1), (idx[("p", c, 1)], -1)], 0, INF)
-
-        # k_max ≥ d[c]
-        row([(km, 1), (dc, -1)],          0, INF)
-        # k_max ≤ d[c] + K·(1 − ismax[c])
-        row([(km, 1), (dc, -1), (im, BK)], -INF, BK)
-
-    # Null stones must form an independent set
-    seen = set()
-    for c in cells:
-        for nb in NB[c]:
-            e = (min(c, nb), max(c, nb))
-            if e not in seen:
-                seen.add(e)
-                row([(idx[("null", c)], 1), (idx[("null", nb)], 1)], -INF, 1)
-
-    # At least one null stone; at least one cell achieves k_max
-    row([(idx[("null",  c)], 1) for c in cells], 1, INF)
-    row([(idx[("ismax", c)], 1) for c in cells], 1, INF)
-
-    # Present indicators: present[k] ↔ some cell has denomination k
+    # Determine k_max from y_k (largest k with y_k == 1)
+    k_max = 0
     for k in range(1, K + 1):
-        pr = idx[("pr", k)]
-        row([(pr, 1)] + [(idx[("p", c, k)], -1) for c in cells], -INF, 0)
-        for c in cells:
-            row([(pr, 1), (idx[("p", c, k)], -1)], 0, INF)
-
-    # Sequencing: denomination k cannot appear before k−1
-    for k in range(2, K + 1):
-        row([(idx[("pr", k)], 1), (idx[("pr", k-1)], -1)], -INF, 0)
-
-    # ------------------------------------------------------------------
-    # 5.  Assemble sparse constraint matrix
-    # ------------------------------------------------------------------
-    nr = len(rows)
-    A  = lil_matrix((nr, nv))
-    lb = np.empty(nr)
-    ub = np.empty(nr)
-    for r, (cv, lo, hi) in enumerate(rows):
-        for ci, val in cv:
-            A[r, ci] += val
-        lb[r] = lo
-        ub[r] = hi
-
-    return c_obj, A.tocsr(), lb, ub, x_lo, x_hi, intg, idx
+        if np.abs(res.x[idx_y(k)] - 1.0) < 0.5:
+            k_max = k
+        else:
+            break
+    return k_max, assignment, elapsed, status
 
 
-# ---------------------------------------------------------------------------
-# Solver
-# ---------------------------------------------------------------------------
-
-def solve(m, n, K=None, time_limit=180, verbose=False):
-    """
-    Solve the Denomination puzzle on an m×n king graph.
-
-    Parameters
-    ----------
-    m, n       : int    grid dimensions
-    K          : int    denomination upper bound  (default: m * n)
-    time_limit : float  HiGHS time limit in seconds
-    verbose    : bool   print HiGHS log
-
-    Returns
-    -------
-    dict with keys
-        kmax       : int or None   optimal maximum denomination found
-        board      : dict          {(row, col): denomination}
-        solve_time : float         wall-clock seconds
-        status     : str           solver status message
-    """
-    if K is None:
-        K = m * n
-
-    print(f"  Building ILP for {m}×{n} grid  (K = {K})…")
-    t0 = time.perf_counter()
-
-    c_obj, A, lb, ub, x_lo, x_hi, intg, idx = build_ilp(m, n, K)
-
-    print(f"  Variables: {len(c_obj)}   Constraints: {A.shape[0]}")
-    print(f"  Calling HiGHS (time limit = {time_limit:.0f}s)…")
-
-    options = {
-        "disp":        verbose,
-        "time_limit":  float(time_limit),
-        "mip_rel_gap": 0.0,
-    }
-
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        result = milp(
-            c_obj,
-            constraints=LinearConstraint(A, lb, ub),
-            integrality=intg,
-            bounds=Bounds(x_lo, x_hi),
-            options=options,
-        )
-
-    elapsed = time.perf_counter() - t0
-
-    cells = [(i, j) for i in range(m) for j in range(n)]
-    board = {}
-    kmax  = None
-
-    if result.x is not None:
-        kmax = int(round(-result.fun))
-        for c in cells:
-            v = int(round(result.x[idx[("d", c)]]))
-            if v > 0:
-                board[c] = v
-
-    return {
-        "kmax":       kmax,
-        "board":      board,
-        "solve_time": elapsed,
-        "status":     result.message,
-    }
-
-
-# ---------------------------------------------------------------------------
-# Display
-# ---------------------------------------------------------------------------
-
-def print_solution(m, n, result):
-    board = result["board"]
-    km    = result["kmax"]
-    t     = result["solve_time"]
-    status = result["status"].split("(")[0].strip()
-
-    print()
-    print(f"  Grid   : {m} × {n}   ({m*n} cells)")
-    print(f"  k_max  : {km if km is not None else '—  (no solution found)'}")
-    print(f"  Used   : {len(board)} / {m*n} cells")
-    print(f"  Time   : {t:.1f}s")
-    print(f"  Status : {status}")
-
-    if not board:
-        return
-
-    print()
-    sep = "  +" + ("--------+" * n)
-    print(sep)
+def print_grid(assignment, m, n, title=""):
+    """Pretty print the grid assignment."""
+    print(f"\n{title}")
     for i in range(m):
-        row = "  |"
+        row = []
         for j in range(n):
-            v = board.get((i, j), 0)
-            cell = " 1*  " if v == 1 else (f"  {v:<2} " if v else "  _  ")
-            row += cell + "|"
-        print(row)
-        print(sep)
-    print()
+            val = assignment.get((i, j), 0)
+            row.append(f"{val:3d}" if val > 0 else "  .")
+        print(" ".join(row))
 
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
 
 def main():
-    args = sys.argv[1:]
+    parser = argparse.ArgumentParser(description="Solve Denomination puzzle.")
+    parser.add_argument("--m", type=int, required=True, help="Number of rows")
+    parser.add_argument("--n", type=int, required=True, help="Number of columns")
+    parser.add_argument("--time-limit", type=float, default=120.0, help="Time limit in seconds")
+    args = parser.parse_args()
 
-    if len(args) >= 2:
-        # Command-line mode:  python denomination_ilp.py m n [time_limit]
-        try:
-            m    = int(args[0])
-            n    = int(args[1])
-            tlim = float(args[2]) if len(args) >= 3 else 180.0
-        except ValueError:
-            print("Usage: python denomination_ilp.py [m n [time_limit_seconds]]")
-            sys.exit(1)
-    else:
-        # Interactive mode
-        print()
-        print("  ╔══════════════════════════════════════╗")
-        print("  ║  Denomination ILP Solver             ║")
-        print("  ║  Finds optimal k_max on an m×n grid  ║")
-        print("  ╚══════════════════════════════════════╝")
-        print()
-        try:
-            m    = int(input("  Rows  m  (1–9): ").strip())
-            n    = int(input("  Cols  n  (1–9): ").strip())
-            raw  = input("  Time limit in seconds  [180]: ").strip()
-            tlim = float(raw) if raw else 180.0
-        except (ValueError, KeyboardInterrupt, EOFError):
-            print("\n  Invalid input. Exiting.")
-            sys.exit(1)
+    print(f"Solving {args.m}x{args.n} grid (time limit {args.time_limit}s)...")
+    k_max, assign, t, status = solve_denomination(args.m, args.n, args.time_limit)
 
-    if not (1 <= m <= 9 and 1 <= n <= 9):
-        print("  Error: m and n must be between 1 and 9.")
+    if k_max is None:
+        print(f"Solver failed: {status}")
         sys.exit(1)
 
-    print()
-    result = solve(m, n, time_limit=tlim)
-    print_solution(m, n, result)
+    print(f"\nStatus: {status}, solve time: {t:.2f}s")
+    print(f"Optimal maximum denomination k_max = {k_max}")
+    print_grid(assign, args.m, args.n, "Optimal grid configuration:")
 
 
 if __name__ == "__main__":
