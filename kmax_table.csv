@@ -1,6 +1,11 @@
-m,n,cells,kmax,cells_used,solve_time_s,status
-2,2,4,1,1,0.4,Optimal
-2,3,6,3,4,3.0,Optimal
-3,3,9,7,8,70.1,Optimal
-3,4,12,>=8,10,120,Time limit (lower bound)
-4,4,16,>=8,11,120,Time limit (lower bound)
+m,n,cells,kmax
+1,1,1,1
+2,2,4,1
+2,3,6,3
+2,4,8,4
+2,5,10,4
+2,6,12,7
+3,3,9,7
+3,4,12,9
+3,5,15,11
+4,4,16,11
