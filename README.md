@@ -38,7 +38,7 @@ Denomination is played on an *m* × *n* grid. Each cell is either empty or holds
 
 ## Repository structure
 
-``
+```
 Denomination/
 ├── README.md                     # full description, formulation, citation
 ├── LICENSE                       
@@ -68,6 +68,3 @@ Install all dependencies:
 ```bash
 pip install pygame scipy numpy
 ```
-
-ENSE).  
-Copyright © 2025 Parth Sarda and Bismark Singh.
