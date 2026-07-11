@@ -1,241 +1,180 @@
-"""
-denomination_ilp.py
-
-Solve the Denomination puzzle on an m x n king graph using a correct MILP.
-Uses scipy.optimize.milp (HiGHS solver) – no commercial license required.
-
-Usage:
-    python denomination_ilp.py --m 3 --n 3 --time-limit 120
-"""
-
-import argparse
-import numpy as np
-from scipy.optimize import milp, LinearConstraint, Bounds
-from scipy.sparse import csr_matrix, lil_matrix
-from itertools import product
-import time
-import sys
-
-def solve_denomination(m: int, n: int, time_limit: float = 120.0):
-    """
-    Solve Denomination puzzle on an m x n king graph.
-    
-    Returns:
-        k_max (int or None): optimal highest denomination (or best found)
-        assignment (dict): mapping (i,j) -> denomination (0 if empty)
-        solve_time (float): seconds taken
-        status (str): 'Optimal', 'Time limit', or 'Infeasible'
-    """
-    cells = [(i, j) for i in range(m) for j in range(n)]
-    V = len(cells)
-    K = m * n                     # safe upper bound, can be reduced for speed
-
-    # Build neighbour list (king graph)
-    neighbours = {}
-    for i, j in cells:
-        neigh = []
-        for di, dj in product((-1, 0, 1), repeat=2):
-            if di == 0 and dj == 0:
-                continue
-            ni, nj = i + di, j + dj
-            if 0 <= ni < m and 0 <= nj < n:
-                neigh.append((ni, nj))
-        neighbours[(i, j)] = neigh
-
-    max_deg = max(len(neighbours[c]) for c in cells)
-    M = max_deg * K + 1           # big-M constant
-
-    # Variable indexing
-    # x[v, k] for v in 0..V-1, k in 1..K
-    # y[k] for k in 1..K
-    n_x = V * K
-    n_y = K
-    n_vars = n_x + n_y
-
-    def idx_x(v, k):
-        return v * K + (k - 1)
-
-    def idx_y(k):
-        return n_x + (k - 1)
-
-    # Objective: maximise sum y_k  -> minimise -sum y_k
-    c = np.zeros(n_vars)
+import itertools
+import networkx as nx
+import pulp
+ 
+ 
+def king_graph(rows, cols):
+    G = nx.Graph()
+    cells = [(r, c) for r in range(rows) for c in range(cols)]
+    G.add_nodes_from(cells)
+    for (r, c) in cells:
+        for dr in (-1, 0, 1):
+            for dc in (-1, 0, 1):
+                if dr == 0 and dc == 0:
+                    continue
+                nr, nc = r + dr, c + dc
+                if 0 <= nr < rows and 0 <= nc < cols:
+                    G.add_edge((r, c), (nr, nc))
+    return G
+ 
+ 
+def build_milp(rows, cols, K=None):
+    cells = [(r, c) for r in range(rows) for c in range(cols)]
+    N = len(cells)
+    if K is None:
+        K = N
+ 
+    G = king_graph(rows, cols)
+    NB = {v: list(G.neighbors(v)) for v in cells}
+    deg = {v: len(NB[v]) for v in cells}
+    real_edges = set(tuple(sorted(e)) for e in G.edges())
+ 
+    # chordal completion: adds the minimal extra "bookkeeping" pairs
+    # needed so that triangle-only consistency constraints are globally
+    # sufficient (king graphs are not chordal from 3x3 upward).
+    H, _ = nx.complete_to_chordal_graph(G)
+    all_edges = set(tuple(sorted(e)) for e in H.edges())
+    fillin_edges = all_edges - real_edges
+    triangles = [c for c in nx.enumerate_all_cliques(H) if len(c) == 3]
+ 
+    prob = pulp.LpProblem("Denomination", pulp.LpMaximize)
+ 
+    # ---- placement variables -------------------------------------------
+    x = {(v, k): pulp.LpVariable(f"x_{v}_{k}", cat="Binary")
+         for v in cells for k in range(1, K + 1)}
+    for v in cells:
+        prob += pulp.lpSum(x[v, k] for k in range(1, K + 1)) <= 1
+ 
+    d = {v: pulp.lpSum(k * x[v, k] for k in range(1, K + 1)) for v in cells}
+    z = {v: pulp.lpSum(x[v, k] for k in range(1, K + 1)) for v in cells}
+ 
+    y = {k: pulp.LpVariable(f"y_{k}", cat="Binary") for k in range(1, K + 1)}
     for k in range(1, K + 1):
-        c[idx_y(k)] = -1.0
-
-    # Build constraints as a list of rows (dense, then convert to sparse)
-    A_rows = []
-    lb_rows = []
-    ub_rows = []
-
-    # 1) One denomination per cell
-    for v in range(V):
-        row = np.zeros(n_vars)
-        for k in range(1, K + 1):
-            row[idx_x(v, k)] = 1.0
-        A_rows.append(row)
-        lb_rows.append(-np.inf)
-        ub_rows.append(1.0)
-
-    # 2) Null stone independence (no two adjacent nulls)
-    for u in cells:
-        for v in neighbours[u]:
-            if (u[0], u[1]) < (v[0], v[1]):   # each edge once
-                row = np.zeros(n_vars)
-                row[idx_x(cells.index(u), 1)] = 1.0
-                row[idx_x(cells.index(v), 1)] = 1.0
-                A_rows.append(row)
-                lb_rows.append(-np.inf)
-                ub_rows.append(1.0)
-
-    # 3) Neighbourhood sum rule (for each cell and each k >= 2)
-    for v_idx, v in enumerate(cells):
+        prob += y[k] <= pulp.lpSum(x[v, k] for v in cells)
+    for k in range(2, K + 1):
+        prob += y[k] <= y[k - 1]                      # contiguity (Rule 3, see theorem above)
+    prob += pulp.lpSum(y[k] for k in range(1, K + 1))  # objective
+ 
+    # ---- 'before' indicators: one per edge of the chordal completion ----
+    b = {}
+    for (u, v) in all_edges:
+        bv = pulp.LpVariable(f"b_{u}_{v}", cat="Binary")
+        b[(u, v)] = bv
+        if (u, v) in real_edges:
+            # value-based linking (Consequence 1): forced when both cells
+            # are occupied and values differ; relaxed (vacuous) whenever
+            # either cell is empty, since d=0 for an empty cell is just a
+            # bookkeeping placeholder, not a real "value" the ordering
+            # theorem applies to.
+            slack = K * (1 - z[u]) + K * (1 - z[v])
+            prob += d[u] - d[v] <= K * (1 - bv) + slack
+            prob += d[v] - d[u] <= K * bv + slack
+        # fill-in edges: b left free, used only for global consistency bookkeeping
+ 
+    def before(u, v):
+        key = tuple(sorted((u, v)))
+        bv = b[key]
+        return bv if key == (u, v) else (1 - bv)
+ 
+    # acyclicity on every triangle of the chordal completion
+    for (u, v, w) in triangles:
+        buv, bvw, bwu = before(u, v), before(v, w), before(w, u)
+        prob += buv + bvw + bwu <= 2
+        prob += buv + bvw + bwu >= 1
+ 
+    # ---- contribution indicators (real neighbor edges only) -------------
+    a, wcontrib = {}, {}
+    for v in cells:
+        for u in NB[v]:
+            au = pulp.LpVariable(f"a_{u}_{v}", cat="Binary")
+            bef = before(u, v)
+            prob += au <= z[u]
+            prob += au <= z[v]
+            prob += au <= bef
+            prob += au >= z[u] + z[v] + bef - 2
+            a[(u, v)] = au
+ 
+            wc = pulp.LpVariable(f"w_{u}_{v}", lowBound=0, upBound=K, cat="Continuous")
+            prob += wc <= K * au
+            prob += wc <= d[u]
+            prob += wc >= d[u] - K * (1 - au)
+            wcontrib[(u, v)] = wc
+ 
+    # ---- Rule 2 (neighbor sum) ------------------------------------------
+    for v in cells:
+        Mv = deg[v] * K
         for k in range(2, K + 1):
-            # contrib = sum_{u in N(v)} sum_{ell=1}^{k-1} ell * x_{u,ell}
-            # Lower: contrib >= k - M*(1 - x_{v,k})
-            # Upper: contrib <= k + M*(1 - x_{v,k})
-            row_lower = np.zeros(n_vars)
-            row_upper = np.zeros(n_vars)
-            for u in neighbours[v]:
-                u_idx = cells.index(u)
-                for ell in range(1, k):
-                    row_lower[idx_x(u_idx, ell)] = ell
-                    row_upper[idx_x(u_idx, ell)] = ell
-            # Lower bound: contrib - M*x_{v,k} >= k - M
-            row_lower[idx_x(v_idx, k)] = -M
-            # Upper bound: contrib + M*x_{v,k} <= k + M
-            row_upper[idx_x(v_idx, k)] = M
-
-            A_rows.append(row_lower)
-            lb_rows.append(k - M)
-            ub_rows.append(np.inf)
-
-            A_rows.append(row_upper)
-            lb_rows.append(-np.inf)
-            ub_rows.append(k + M)
-
-    # 4) Appearance: y_k <= sum_v x_{v,k}  and  sum_v x_{v,k} <= V * y_k
-    for k in range(1, K + 1):
-        # y_k - sum_v x_{v,k} <= 0
-        row1 = np.zeros(n_vars)
-        row1[idx_y(k)] = 1.0
-        for v in range(V):
-            row1[idx_x(v, k)] = -1.0
-        A_rows.append(row1)
-        lb_rows.append(-np.inf)
-        ub_rows.append(0.0)
-
-        # sum_v x_{v,k} - V*y_k <= 0
-        row2 = np.zeros(n_vars)
-        for v in range(V):
-            row2[idx_x(v, k)] = 1.0
-        row2[idx_y(k)] = -V
-        A_rows.append(row2)
-        lb_rows.append(-np.inf)
-        ub_rows.append(0.0)
-
-    # 5) Contiguity: y_k >= y_{k+1}  -> y_{k+1} - y_k <= 0
-    for k in range(1, K):
-        row = np.zeros(n_vars)
-        row[idx_y(k + 1)] = 1.0
-        row[idx_y(k)] = -1.0
-        A_rows.append(row)
-        lb_rows.append(-np.inf)
-        ub_rows.append(0.0)
-
-    # 6) Link: x_{v,k} <= y_k  -> x_{v,k} - y_k <= 0
-    for v in range(V):
+            s = pulp.lpSum(wcontrib[(u, v)] for u in NB[v])
+            prob += s >= k - Mv * (1 - x[v, k])
+            prob += s <= k + Mv * (1 - x[v, k])
+ 
+    # ---- Rule 1 (null stone) ---------------------------------------------
+    for v in cells:
+        for u in NB[v]:
+            prob += a[(u, v)] <= 1 - x[v, 1]
+ 
+    meta = dict(cells=cells, N=N, K=K, x=x, y=y, d=d, z=z, b=b, before=before,
+                a=a, w=wcontrib, NB=NB, real_edges=real_edges,
+                fillin_edges=fillin_edges, triangles=triangles)
+    return prob, meta
+ 
+ 
+def solve_and_extract(rows, cols, K=None, msg=False, time_limit=None, min_kmax=None):
+    prob, meta = build_milp(rows, cols, K=K)
+    if min_kmax is not None:
+        prob += pulp.lpSum(meta["y"][k] for k in range(1, meta["K"] + 1)) >= min_kmax
+    solver = pulp.PULP_CBC_CMD(msg=msg, timeLimit=time_limit)
+    prob.solve(solver)
+    status = pulp.LpStatus[prob.status]
+ 
+    cells, K = meta["cells"], meta["K"]
+    x = meta["x"]
+    board = {}
+    for v in cells:
         for k in range(1, K + 1):
-            row = np.zeros(n_vars)
-            row[idx_x(v, k)] = 1.0
-            row[idx_y(k)] = -1.0
-            A_rows.append(row)
-            lb_rows.append(-np.inf)
-            ub_rows.append(0.0)
-
-    # 7) At least one null stone: y_1 = 1
-    row = np.zeros(n_vars)
-    row[idx_y(1)] = 1.0
-    A_rows.append(row)
-    lb_rows.append(1.0)
-    ub_rows.append(1.0)
-
-    # Build sparse matrix
-    A = csr_matrix(np.vstack(A_rows))
-
-    # Variable bounds: all binary
-    x_low = np.zeros(n_vars)
-    x_high = np.ones(n_vars)
-    integrality = np.ones(n_vars, dtype=int)
-
-    # Solve
-    start = time.time()
-    res = milp(
-        c,
-        constraints=LinearConstraint(A, lb_rows, ub_rows),
-        integrality=integrality,
-        bounds=Bounds(x_low, x_high),
-        options={"time_limit": time_limit, "mip_rel_gap": 0.0},
-    )
-    elapsed = time.time() - start
-
-    if res.status == 0:          # Optimal
-        status = "Optimal"
-    elif res.status == 1:        # Time limit
-        status = "Time limit"
-    else:
-        status = f"Infeasible/unbounded (status {res.status})"
-        return None, None, elapsed, status
-
-    # Extract assignment
-    assignment = {}
-    for v_idx, cell in enumerate(cells):
-        for k in range(1, K + 1):
-            if np.abs(res.x[idx_x(v_idx, k)] - 1.0) < 0.5:
-                assignment[cell] = k
+            if pulp.value(x[v, k]) > 0.5:
+                board[v] = k
                 break
-        else:
-            assignment[cell] = 0
-
-    # Determine k_max from y_k (largest k with y_k == 1)
-    k_max = 0
-    for k in range(1, K + 1):
-        if np.abs(res.x[idx_y(k)] - 1.0) < 0.5:
-            k_max = k
-        else:
-            break
-    return k_max, assignment, elapsed, status
-
-
-def print_grid(assignment, m, n, title=""):
-    """Pretty print the grid assignment."""
-    print(f"\n{title}")
-    for i in range(m):
-        row = []
-        for j in range(n):
-            val = assignment.get((i, j), 0)
-            row.append(f"{val:3d}" if val > 0 else "  .")
-        print(" ".join(row))
-
-
-def main():
-    parser = argparse.ArgumentParser(description="Solve Denomination puzzle.")
-    parser.add_argument("--m", type=int, required=True, help="Number of rows")
-    parser.add_argument("--n", type=int, required=True, help="Number of columns")
-    parser.add_argument("--time-limit", type=float, default=120.0, help="Time limit in seconds")
-    args = parser.parse_args()
-
-    print(f"Solving {args.m}x{args.n} grid (time limit {args.time_limit}s)...")
-    k_max, assign, t, status = solve_denomination(args.m, args.n, args.time_limit)
-
-    if k_max is None:
-        print(f"Solver failed: {status}")
-        sys.exit(1)
-
-    print(f"\nStatus: {status}, solve time: {t:.2f}s")
-    print(f"Optimal maximum denomination k_max = {k_max}")
-    print_grid(assign, args.m, args.n, "Optimal grid configuration:")
-
-
+    kmax = max(board.values(), default=0)
+    order = reconstruct_order(meta, board)
+ 
+    return dict(status=status, objective=pulp.value(prob.objective),
+                kmax=kmax, board=board, order=order)
+ 
+ 
+def reconstruct_order(meta, board):
+    """Sort occupied cells by value; break ties using the model's own
+    'before' relation (topological sort within each value tier)."""
+    cells = meta["cells"]
+    occupied = [v for v in cells if v in board]
+    by_value = {}
+    for v in occupied:
+        by_value.setdefault(board[v], []).append(v)
+ 
+    order = []
+    for k in sorted(by_value.keys()):
+        tier = by_value[k]
+        if len(tier) == 1:
+            order.extend(tier)
+            continue
+        Gt = nx.DiGraph()
+        Gt.add_nodes_from(tier)
+        for u, v in itertools.combinations(tier, 2):
+            key = tuple(sorted((u, v)))
+            if key in meta["b"]:
+                bef = meta["before"](u, v)
+                val = pulp.value(bef) if hasattr(bef, "varValue") or not isinstance(bef, (int, float)) else bef
+                if val is None:
+                    val = 0
+                if val > 0.5:
+                    Gt.add_edge(u, v)
+                else:
+                    Gt.add_edge(v, u)
+        order.extend(nx.topological_sort(Gt))
+    return order
+ 
+ 
 if __name__ == "__main__":
-    main()
+    for (rows, cols) in [(1, 1), (1, 2), (2, 2), (2, 3), (3,3)]:
+        res = solve_and_extract(rows, cols, msg=False)
+        print(rows, cols, res["status"], "kmax=", res["kmax"], res["board"], res["order"])
