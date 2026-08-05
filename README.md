@@ -88,10 +88,6 @@ independent brute-force verifier in `denomination_verify.py`. Edit the `if __nam
 "__main__":` block at the bottom of `main.py` to change the grid size, switch between the
 MILP solver and the verifier, or launch the interactive game instead.
 
-## About
-
-No description, website, or topics provided.
-
 
 
 
