@@ -41,11 +41,11 @@ Denomination/
 ├── model/
 │   └── denomination_ilp.py       # formulation of MILP 
 ├── game/
-│   └── denomination_game.py      #interactive pygame version of denomination
+│   └── denomination_game.py      # interactive pygame version of denomination
 ├── results/
 │   └── kmax_table.csv            # updated with verified optimal values
 ├── enumerator                       
-└── bruteforce.py              
+└── bruteforce.py                 # an independent enumerator that plays the puzzle by the rules of the puzzle
 ```
 
 
