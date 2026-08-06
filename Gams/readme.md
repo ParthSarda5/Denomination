@@ -1,4 +1,4 @@
-DENOMINATION GAMS MODEL
+## Denomination GAMS model
 
 Files
 -----
