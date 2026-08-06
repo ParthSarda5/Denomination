@@ -4,24 +4,25 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 This project contains the code used in the article **Denomination: A Placement Puzzle for
-Teaching Integer Programming and Graph-Based Modeling** by **Parth Sarda** and **Dr. Bismark Singh**, submitted to *INFORMS Transactions
-on Education*. We provide the implementation of the exact mixed-integer linear programming
-(MILP) formulation discussed in the article, an interactive Pygame implementation of the
-puzzle for classroom use, and verified optimal $k_{\max}$ values for small grids.
+Teaching Integer Programming and Graph-Based Modeling** by **Parth Sarda** and **Bismark
+Singh**, submitted to *INFORMS Transactions on Education*. We provide the implementations
+of the exact mixed-integer linear programming (MILP) formulation discussed in the article,
+an independent enumerator used to verify optimal $k_{\max}$ values, and an interactive
+Pygame implementation of the puzzle for classroom use.
 
 ## Requirements for running the code
 
 Before running the code, make sure you have the below installed:
 
 - python3 (>= 3.9)
-- numpy
-- scipy (>= 1.9, for the ILP solver)
-- pygame (>= 2.0, for the interactive game only)
+- networkx
+- pulp
+- pygame (for the interactive game only)
 
 Install all dependencies with:
 
 ```bash
-pip install numpy scipy pygame
+pip install networkx pulp pygame
 ```
 
 Clone the repository as usual:
@@ -31,22 +32,50 @@ git clone https://github.com/ParthSarda5/Denomination.git
 cd Denomination
 ```
 
-## Repository structure
+## Repository content
 
+Please refer to the manuscript for the puzzle rules and the MILP formulation's notation.
+The repository is structured as follows:
+
+- `data`: This folder contains verified results.
+  - `kmax_table.csv`: optimal (or best-known, for the largest grids) values of $k_{\max}$
+    for $m \times n$ grids, indexed by `m`, `n`, `cells` ($=mn$), and `kmax`. To load it, we
+    provide the function `load_kmax_table` in `utils.py`.
+
+- `milp_and_enumerator`: This folder contains the main part of the code. We briefly
+  describe the purpose of each file:
+  - `denomination_ilp.py`: the exact MILP formulation of Denomination and a `pulp`-based
+    solver for it (function `solve_and_extract`), including reconstruction of a legal
+    placement order from the optimal solution (`reconstruct_order`).
+  - `bruteforce.py`: an independent enumerator that plays the puzzle directly by its rules
+    (Rule 1-3), used to verify the MILP's optimal $k_{\max}$ without relying on the MILP
+    formulation. It provides an exact breadth-first search over reachable board states
+    (`solve_exact`, feasible up to roughly 4x4) and a depth-first branch-and-bound search
+    with an anytime guarantee (`solve_branch_and_bound`, used for larger grids such as 5x5,
+    where it returns a proven optimum if the search completes in time, and otherwise a
+    lower bound together with a witnessing placement sequence).
+  - `denomination_game.py`: an interactive Pygame implementation of the puzzle, used for
+    classroom demonstrations and manual exploration of the rules.
+  - `utils.py`: subroutines shared by the files above — king-graph construction and
+    adjacency, the rectangle's symmetry group (used to deduplicate reachable states in
+    `bruteforce.py`), board rendering, and the `data/kmax_table.csv` loader.
+  - `main.py`: a concrete example of how to run the code end to end (see below).
+
+## Example
+
+We provide a short concrete example of how to run this code in the `main.py` file. To run
+it, make sure you have navigated to the repository root in your terminal, then run:
+
+```bash
+python3 ./milp_and_enumerator/main.py
 ```
-Denomination/
-├── README.md                     # full description, formulation, citation
-├── LICENSE                       
-├── AUTHORS                       
-├── model/
-│   └── denomination_ilp.py       # formulation of MILP 
-├── game/
-│   └── denomination_game.py      # interactive pygame version of denomination
-├── results/
-│   └── kmax_table.csv            # updated with verified optimal values
-├── enumerator                       
-└── bruteforce.py                 # an independent enumerator that plays the puzzle by the rules of the puzzle
-```
+
+By default, this solves the 3x3 grid with the exact MILP formulation in
+`denomination_ilp.py`, reproduces the worked example from the manuscript ($k_{\max} = 7$),
+and cross-checks the result against the independent enumerator in `bruteforce.py`. Edit the
+`if __name__ == "__main__":` block at the bottom of `main.py` to change the grid size, or
+run `python3 ./milp_and_enumerator/denomination_game.py` to launch the interactive game
+instead.
 
 
 
