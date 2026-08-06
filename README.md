@@ -1,7 +1,6 @@
 # Denomination: A Placement Puzzle for Teaching Integer Programming and Graph-Based Modeling
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 This project contains the code used in the article **Denomination: A Placement Puzzle for
 Teaching Integer Programming and Graph-Based Modeling** by **Parth Sarda** and **Bismark
