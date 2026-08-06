@@ -1,0 +1,53 @@
+--- Job denomination.gms Start 08/04/26 11:52:19 54.2.1 d9889eb3 WEX-WEI x86 64bit/MS Windows
+--- Applying:
+    C:\GAMS\54\gmsprmNT.txt
+    C:\Users\bisma\OneDrive\Documents\GAMS\gamsconfig.yaml
+--- GAMS Parameters defined
+    Input "C:\Users\bisma\Dropbox\Apps\Overleaf\Parth ITED\Gams\denomination.gms"
+    PageSize 0
+    ScrDir "C:\Users\bisma\Dropbox\Apps\Overleaf\Parth ITED\Gams\225a\"
+    SysDir C:\GAMS\54\
+    LogOption 3
+    AppendLog 1
+    ErrMsg 1
+    ErrorLog 99
+    IDE 1
+    LstTitleLeftAligned 1
+Licensee: Bismark Singh, Single User License             G250916+0003Ac-WIN
+          University of Southampton, Centre for Operational ResearchDC16809
+          C:\Users\bisma\OneDrive\Documents\GAMS\gamslice.txt
+          6dd2bb11-2e0d-4827
+          v:2                                                              
+          The maintenance period of the license expires on Jan 23, 2030
+System information: 4 physical cores and 32 Gb physical memory detected
+GAMS 54.2.1   Copyright (C) 1987-2026 GAMS Development. All rights reserved
+--- Starting compilation
+--- denomination.gms(332) 3 Mb
+--- Starting execution: elapsed 0:00:00.030
+--- denomination.gms(207) 4 Mb
+--- Generating MIP model denomination
+--- denomination.gms(209) 5 Mb
+---   3,056 rows  1,014 columns  14,942 non-zeroes
+---   794 discrete-columns
+--- Range statistics (absolute non-zero finite values)
+--- RHS       [min, max] : [ 1.000E+00, 2.250E+02] - Zero values observed as well
+--- Bound     [min, max] : [ 1.000E+00, 2.500E+01] - Zero values observed as well
+--- Matrix    [min, max] : [ 1.000E+00, 2.000E+02]
+--- Executing GUROBI (Solvelink=2): elapsed 0:00:00.052
+
+    Gurobi           54.2.1 d9889eb3 Jul 13, 2026          WEI x86 64bit/MS Window
+
+... GAMS/Gurobi Link license.
+
+*** License Error: License expired 2026-07-29
+*** [Trace: solver start]
+
+--- Reading solution for model denomination
+--- Executing after solve: elapsed 0:00:00.376
+--- denomination.gms(332) 6 Mb
+--- Putfile boardOut C:\Users\bisma\Dropbox\Apps\Overleaf\Parth ITED\Gams\denomination_board.csv
+--- Putfile sequenceOut C:\Users\bisma\Dropbox\Apps\Overleaf\Parth ITED\Gams\denomination_sequence.csv
+--- Putfile arcOut C:\Users\bisma\Dropbox\Apps\Overleaf\Parth ITED\Gams\denomination_arcs.csv
+*** Status: Normal completion
+--- Job denomination.gms Stop 08/04/26 11:52:19 elapsed 0:00:00.379
+Cannot delete directory: 225a

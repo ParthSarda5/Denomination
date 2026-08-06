@@ -1,0 +1,481 @@
+
+--- Job denomination.gms Start 08/04/26 11:52:28 54.2.1 d9889eb3 WEX-WEI x86 64bit/MS Windows
+--- Applying:
+    C:\GAMS\54\gmsprmNT.txt
+    C:\Users\bisma\OneDrive\Documents\GAMS\gamsconfig.yaml
+--- GAMS Parameters defined
+    Input "C:\Users\bisma\Dropbox\Apps\Overleaf\Parth ITED\Gams\denomination.gms"
+    PageSize 0
+    ScrDir "C:\Users\bisma\Dropbox\Apps\Overleaf\Parth ITED\Gams\225a\"
+    SysDir C:\GAMS\54\
+    LogOption 3
+    AppendLog 1
+    ErrMsg 1
+    ErrorLog 99
+    IDE 1
+    LstTitleLeftAligned 1
+Licensee: Bismark Singh, Single User License             G250916+0003Ac-WIN
+          University of Southampton, Centre for Operational ResearchDC16809
+          C:\Users\bisma\OneDrive\Documents\GAMS\gamslice.txt
+          6dd2bb11-2e0d-4827
+          v:2                                                              
+          The maintenance period of the license expires on Jan 23, 2030
+System information: 4 physical cores and 32 Gb physical memory detected
+GAMS 54.2.1   Copyright (C) 1987-2026 GAMS Development. All rights reserved
+--- Starting compilation
+--- denomination.gms(332) 3 Mb
+--- Starting execution: elapsed 0:00:00.043
+--- denomination.gms(207) 4 Mb
+--- Generating MIP model denomination
+--- denomination.gms(209) 5 Mb
+---   3,056 rows  1,014 columns  14,942 non-zeroes
+---   794 discrete-columns
+--- Range statistics (absolute non-zero finite values)
+--- RHS       [min, max] : [ 1.000E+00, 2.250E+02] - Zero values observed as well
+--- Bound     [min, max] : [ 1.000E+00, 2.500E+01] - Zero values observed as well
+--- Matrix    [min, max] : [ 1.000E+00, 2.000E+02]
+--- Executing CPLEX (Solvelink=2): elapsed 0:00:00.093
+
+IBM ILOG CPLEX   54.2.1 d9889eb3 Jul 13, 2026          WEI x86 64bit/MS Window
+
+*** This solver runs with a community license.
+--- GMO setup time: 0.00s
+--- Space for names approximately 0.12 Mb
+--- Use option 'names no' to turn use of names off
+--- GMO memory 1.46 Mb (peak 1.46 Mb)
+--- Dictionary memory 0.00 Mb
+--- Cplex 22.1.2.0 link memory 0.05 Mb (peak 0.36 Mb)
+--- Starting Cplex
+
+Version identifier: 22.1.2.0 | 2024-11-25 | 0edbb82fd
+CPXPARAM_Advance                                 0
+CPXPARAM_MIP_Display                             4
+CPXPARAM_MIP_Pool_Capacity                       0
+CPXPARAM_Preprocessing_QCPDuals                  0
+CPXPARAM_TimeLimit                               3600
+CPXPARAM_MIP_Tolerances_AbsMIPGap                0
+CPXPARAM_MIP_Tolerances_MIPGap                   0
+Generic callback                                 0x50
+Tried aggregator 1 time.
+MIP Presolve eliminated 52 rows and 2 columns.
+MIP Presolve modified 2400 coefficients.
+Reduced MIP has 3003 rows, 1012 columns, and 14237 nonzeros.
+Reduced MIP has 793 binaries, 0 generals, 0 SOSs, and 0 indicators.
+Presolve time = 0.02 sec. (8.35 ticks)
+Found incumbent of value 1.000000 after 0.05 sec. (13.71 ticks)
+Probing time = 0.02 sec. (3.55 ticks)
+Tried aggregator 1 time.
+Detecting symmetries...
+MIP Presolve modified 144 coefficients.
+Reduced MIP has 3003 rows, 1012 columns, and 14381 nonzeros.
+Reduced MIP has 818 binaries, 25 generals, 0 SOSs, and 0 indicators.
+Presolve time = 0.01 sec. (12.17 ticks)
+Probing time = 0.00 sec. (3.88 ticks)
+Clique table members: 6723.
+MIP emphasis: balance optimality and feasibility.
+MIP search method: dynamic search.
+Parallel mode: deterministic, using up to 8 threads.
+Parallel mode: deterministic, using up to 2 threads for parallel tasks at root LP.
+Parallel mode: deterministic, using up to 6 threads for concurrent optimization:
+ * Starting dual Simplex on 1 thread...
+ * Starting Barrier on 4 threads...
+ * Starting primal Simplex on 1 thread...
+Tried aggregator 1 time.
+No LP presolve or aggregator reductions.
+Presolve time = 0.00 sec. (1.37 ticks)
+Initializing dual steep norms . . .
+
+Iteration log . . .
+Iteration:     1   Dual objective     =            25.000000
+Perturbation started.
+Iteration:   101   Dual objective     =            25.000000
+Iteration:   203   Dual objective     =            24.999992
+Iteration:   281   Dual objective     =            24.999990
+Iteration:   346   Dual objective     =            24.999981
+Iteration:   424   Dual objective     =            24.999979
+Iteration:   523   Dual objective     =            24.999962
+Iteration:   601   Dual objective     =            24.999960
+Iteration:   676   Dual objective     =            24.999954
+Iteration:   760   Dual objective     =            24.999951
+Iteration:   833   Dual objective     =            24.999938
+Iteration:   925   Dual objective     =            24.999932
+Iteration:  1001   Dual objective     =            24.999929
+Iteration:  1091   Dual objective     =            24.999924
+Iteration:  1173   Dual objective     =            24.999922
+Iteration:  1241   Dual objective     =            24.999920
+Iteration:  1313   Dual objective     =            24.999919
+Iteration:  1384   Dual objective     =            24.999914
+Iteration:  1460   Dual objective     =            24.999912
+Iteration:  1542   Dual objective     =            24.999910
+Removing perturbation.
+
+Barrier solved model.
+
+Root relaxation solution time = 0.23 sec. (133.90 ticks)
+
+        Nodes                                         Cuts/
+   Node  Left     Objective  IInf  Best Integer    Best Bound    ItCnt     Gap
+
+*     0+    0                            1.0000       25.0000              --- 
+Found incumbent of value 1.000000 after 0.39 sec. (178.95 ticks)
+      0     0       25.0000   338        1.0000       25.0000        9     --- 
+*     0+    0                            6.0000       25.0000           316.67%
+Found incumbent of value 6.000000 after 0.84 sec. (427.78 ticks)
+      0     0       25.0000    90        6.0000   ZeroHalf: 1       15  316.67%
+      0     0       25.0000   166        6.0000      Cuts: 68      367  316.67%
+      0     0       25.0000    78        6.0000       Cuts: 6      389  316.67%
+      0     0       25.0000   116        6.0000      Cuts: 43      471  316.67%
+      0     2       25.0000    89        6.0000       25.0000      471  316.67%
+Elapsed time = 2.36 sec. (1048.98 ticks, tree = 0.02 MB)
+      8     7       21.0000   166        6.0000       25.0000     2892  316.67%
+    184   142       25.0000   172        6.0000       25.0000    15991  316.67%
+                                                     Cuts: 41                  
+    204   145       25.0000   224        6.0000       25.0000    20168  316.67%
+                                                 Impl Bds: 12                  
+    273   194       25.0000   155        6.0000       25.0000    41783  316.67%
+                                                  Impl Bds: 7                  
+    337   238       25.0000   180        6.0000       25.0000    52188  316.67%
+                                                 Impl Bds: 10                  
+    407   263       25.0000   146        6.0000       25.0000    68142  316.67%
+                                                 Impl Bds: 36                  
+    523   275       24.1667   153        6.0000       25.0000    73972  316.67%
+                                                 Impl Bds: 22                  
+    649   360    infeasible              6.0000       25.0000    95265  316.67%
+                                                  Impl Bds: 8                  
+    727   396       25.0000   143        6.0000       25.0000   107975  316.67%
+                                                 Impl Bds: 27                  
+   1160   471       23.0000   122        6.0000       25.0000   159377  316.67%
+                                                     Cuts: 83                  
+Elapsed time = 10.94 sec. (4196.74 ticks, tree = 7.09 MB)
+   1661   679       24.9475   127        6.0000       25.0000   220155  316.67%
+                                                     Cuts: 99                  
+   2136   793       25.0000   139        6.0000       25.0000   274066  316.67%
+                                                     Cuts: 86                  
+   2802  1013    infeasible              6.0000       25.0000   331484  316.67%
+                                                     Cuts: 59                  
+   3131  1051        cutoff              6.0000       25.0000   382697  316.67%
+                                                 Impl Bds: 38                  
+   3590  1197       24.6667   128        6.0000       25.0000   436820  316.67%
+                                                     Cuts: 52                  
+   4078  1272       25.0000   148        6.0000       25.0000   489589  316.67%
+                                                     Cuts: 53                  
+   4451  1406    infeasible              6.0000       25.0000   555658  316.67%
+                                                     Cuts: 41                  
+   4811  1456       24.0000   139        6.0000       25.0000   602135  316.67%
+                                                     Cuts: 41                  
+*  4862+ 1460                            8.0000       25.0000           212.50%
+Found incumbent of value 8.000000 after 33.19 sec. (11928.11 ticks)
+
+Performing restart 1
+
+Repeating presolve.
+Tried aggregator 1 time.
+MIP Presolve eliminated 208 rows and 8 columns.
+Reduced MIP has 2795 rows, 1004 columns, and 13957 nonzeros.
+Reduced MIP has 810 binaries, 25 generals, 0 SOSs, and 0 indicators.
+Presolve time = 0.02 sec. (6.40 ticks)
+Tried aggregator 1 time.
+Reduced MIP has 2795 rows, 1004 columns, and 13957 nonzeros.
+Reduced MIP has 810 binaries, 25 generals, 0 SOSs, and 0 indicators.
+Presolve time = 0.03 sec. (11.23 ticks)
+Represolve time = 0.16 sec. (32.99 ticks)
+Tried aggregator 1 time.
+LP Presolve eliminated 5 rows and 0 columns.
+Reduced LP has 3526 rows, 1004 columns, and 24150 nonzeros.
+Presolve time = 0.01 sec. (2.51 ticks)
+Initializing dual steep norms . . .
+
+Iteration log . . .
+Iteration:     1   Dual objective     =            25.000000
+Perturbation started.
+Iteration:   101   Dual objective     =            25.000000
+Iteration:   208   Dual objective     =            24.999991
+Iteration:   289   Dual objective     =            24.999988
+Iteration:   392   Dual objective     =            24.999979
+Iteration:   477   Dual objective     =            24.999976
+Iteration:   591   Dual objective     =            24.999949
+Iteration:   683   Dual objective     =            24.999947
+Iteration:   761   Dual objective     =            24.999940
+Iteration:   852   Dual objective     =            24.999935
+Iteration:   927   Dual objective     =            24.999929
+Iteration:  1012   Dual objective     =            24.999928
+Iteration:  1090   Dual objective     =            24.999918
+Iteration:  1182   Dual objective     =            24.999918
+Iteration:  1268   Dual objective     =            24.999915
+Iteration:  1351   Dual objective     =            24.999914
+Iteration:  1426   Dual objective     =            24.999912
+Iteration:  1517   Dual objective     =            24.999910
+Iteration:  1600   Dual objective     =            24.999908
+Iteration:  1695   Dual objective     =            24.999909
+Iteration:  1781   Dual objective     =            24.999907
+Iteration:  1861   Dual objective     =            24.999906
+Iteration:  1942   Dual objective     =            24.999903
+Iteration:  2025   Dual objective     =            24.999898
+Iteration:  2108   Dual objective     =            24.999898
+Iteration:  2197   Dual objective     =            24.999898
+Iteration:  2293   Dual objective     =            24.999897
+Removing perturbation.
+Initializing dual steep norms . . .
+   5025     0       25.0000   113        8.0000       Cuts: 6   650775  212.50%
+   5025     0       25.0000   196        8.0000     Cuts: 174   651400  212.50%
+   5025     0       25.0000   119        8.0000      Cuts: 27   651509  212.50%
+   5025     0       25.0000   179        8.0000     Cuts: 176   652173  212.50%
+   5025     0       25.0000   114        8.0000      Cuts: 11   652261  212.50%
+   5025     0       25.0000   195        8.0000     Cuts: 200   652757  212.50%
+   5025     0       25.0000    98        8.0000      Cuts: 25   652816  212.50%
+   5025     0       25.0000   135        8.0000     Cuts: 165   653021  212.50%
+   5025     2       25.0000    83        8.0000       25.0000   653021  212.50%
+   5047    19       25.0000   188        8.0000       25.0000   659503  212.50%
+Elapsed time = 47.11 sec. (17568.96 ticks, tree = 0.13 MB)
+   5221   128       25.0000   150        8.0000       25.0000   677210  212.50%
+                                                  Impl Bds: 6                  
+   5421   229       25.0000   147        8.0000       25.0000   709150  212.50%
+                                                      Cuts: 4                  
+   5687   333       23.0000   116        8.0000       25.0000   742201  212.50%
+                                                     Cuts: 17                  
+   6092   428    infeasible              8.0000       25.0000   771630  212.50%
+                                                     Cuts: 23                  
+   6520   627       25.0000   139        8.0000       25.0000   811294  212.50%
+                                                     Cuts: 43                  
+   6836   760       25.0000   143        8.0000       25.0000   873738  212.50%
+                                                     Cuts: 17                  
+   7110   836       22.0000    99        8.0000       25.0000   904720  212.50%
+                                                      Cuts: 9                  
+   7616  1058    infeasible              8.0000       25.0000   971880  212.50%
+                                                     Cuts: 14                  
+   7881  1160    infeasible              8.0000       25.0000  1021547  212.50%
+                                                     Cuts: 12                  
+   8112  1187       25.0000   138        8.0000       25.0000  1055290  212.50%
+                                                     Cuts: 10                  
+Elapsed time = 67.69 sec. (27141.17 ticks, tree = 22.46 MB)
+   8383  1297       25.0000   128        8.0000       25.0000  1118224  212.50%
+                                                      Cuts: 8                  
+   8597  1350    infeasible              8.0000       25.0000  1159484  212.50%
+                                                      Cuts: 5                  
+   8795  1403       25.0000   128        8.0000       25.0000  1201702  212.50%
+                                                     Cuts: 13                  
+   9075  1448       24.8280   153        8.0000       25.0000  1257419  212.50%
+                                                     Cuts: 15                  
+   9305  1487       25.0000   152        8.0000       25.0000  1291189  212.50%
+                                                      Cuts: 8                  
+   9478  1531    infeasible              8.0000       25.0000  1349910  212.50%
+                                                      Cuts: 6                  
+   9694  1628    infeasible              8.0000       25.0000  1400141  212.50%
+                                                     Cuts: 14                  
+   9924  1636       24.6929   147        8.0000       25.0000  1434399  212.50%
+                                                     Cuts: 13                  
+  10153  1740       22.4008   136        8.0000       25.0000  1510620  212.50%
+                                                      Cuts: 5                  
+  10413  1801    infeasible              8.0000       25.0000  1553626  212.50%
+                                                      Cuts: 8                  
+Elapsed time = 89.98 sec. (36719.55 ticks, tree = 36.34 MB)
+  10631  1850       25.0000   164        8.0000       25.0000  1582707  212.50%
+  10895  1988       24.9140   160        8.0000       25.0000  1654114  212.50%
+  11186  2053    infeasible              8.0000       25.0000  1682214  212.50%
+                                                      Cuts: 3                  
+  11475  2184       19.0000    97        8.0000       25.0000  1739851  212.50%
+  11777  2342    infeasible              8.0000       25.0000  1802490  212.50%
+                                                  Impl Bds: 1                  
+  12023  2420       25.0000   133        8.0000       25.0000  1830786  212.50%
+                                                      Cuts: 4                  
+  12314  2620       24.8065   138        8.0000       25.0000  1914842  212.50%
+                                                     Cuts: 13                  
+  12648  2707       21.0000   119        8.0000       25.0000  1948281  212.50%
+                                                     Cuts: 10                  
+  12967  2844       22.5714   120        8.0000       25.0000  1998083  212.50%
+                                                      Cuts: 4                  
+  13241  2992       24.9973   148        8.0000       25.0000  2033576  212.50%
+Elapsed time = 113.02 sec. (46293.31 ticks, tree = 64.27 MB)
+  13470  3082       23.0000   139        8.0000       25.0000  2056034  212.50%
+                                                      Cuts: 7                  
+  13707  3164       24.7500   124        8.0000       25.0000  2098881  212.50%
+                                                      Cuts: 2                  
+  13961  3291    infeasible              8.0000       25.0000  2164946  212.50%
+  14285  3328       24.0000   113        8.0000       25.0000  2187403  212.50%
+                                                    Covers: 1                  
+  14659  3550       20.5017   133        8.0000       25.0000  2272244  212.50%
+                                                      Cuts: 8                  
+  15096  3654       23.9918   156        8.0000       25.0000  2305143  212.50%
+                                                      Cuts: 5                  
+  15348  3826       22.5978   131        8.0000       25.0000  2368984  212.50%
+                                                    Covers: 3                  
+  15573  3857        cutoff              8.0000       25.0000  2396286  212.50%
+                                                   MIRcuts: 1                  
+  15851  4007    infeasible              8.0000       25.0000  2480991  212.50%
+                                                      Cuts: 3                  
+  16086  4078       24.6452   172        8.0000       25.0000  2511348  212.50%
+                                                      Cuts: 2                  
+Elapsed time = 136.47 sec. (55862.95 ticks, tree = 89.82 MB)
+  16364  4204       21.6584   107        8.0000       25.0000  2570074  212.50%
+                                                      Cuts: 8                  
+  16618  4318       23.0000   145        8.0000       25.0000  2629194  212.50%
+                                                      Cuts: 6                  
+  16834  4426       25.0000   158        8.0000       25.0000  2686205  212.50%
+                                                      Cuts: 6                  
+  17058  4488       24.5000   130        8.0000       25.0000  2740451  212.50%
+                                                  Flowcuts: 1                  
+  17245  4504    infeasible              8.0000       25.0000  2761649  212.50%
+                                                      Cuts: 4                  
+  17477  4620       25.0000   119        8.0000       25.0000  2845282  212.50%
+  17772  4683       25.0000   147        8.0000       25.0000  2903516  212.50%
+  18066  4786       25.0000   127        8.0000       25.0000  2959942  212.50%
+                                                      Cuts: 2                  
+  18325  4809       24.9487   128        8.0000       25.0000  2980490  212.50%
+                                                      Cuts: 6                  
+  18589  4905       24.0000   130        8.0000       25.0000  3070570  212.50%
+                                                      Cuts: 7                  
+Elapsed time = 159.52 sec. (65450.78 ticks, tree = 109.37 MB)
+  18866  4913       24.9565   136        8.0000       25.0000  3097764  212.50%
+  19152  4919    infeasible              8.0000       25.0000  3137662  212.50%
+                                                      Cuts: 6                  
+  19376  4966       24.0000   121        8.0000       25.0000  3179358  212.50%
+  19611  4977       24.0000   146        8.0000       25.0000  3251871  212.50%
+                                                    Covers: 2                  
+  19825  4990       25.0000   135        8.0000       25.0000  3278394  212.50%
+                                                      Cuts: 2                  
+  20098  5008       25.0000   110        8.0000       25.0000  3310234  212.50%
+                                                      Cuts: 5                  
+  20351  5028    infeasible              8.0000       25.0000  3373572  212.50%
+  20619  5056       25.0000   132        8.0000       25.0000  3404732  212.50%
+                                                      Cuts: 3                  
+  20870  5108       25.0000   135        8.0000       25.0000  3467499  212.50%
+                                                      Cuts: 4                  
+  21120  5223       25.0000   124        8.0000       25.0000  3578617  212.50%
+Elapsed time = 180.17 sec. (75068.28 ticks, tree = 116.39 MB)
+  21396  5228    infeasible              8.0000       25.0000  3577235  212.50%
+  21692  5239    infeasible              8.0000       25.0000  3615932  212.50%
+  21964  5340    infeasible              8.0000       25.0000  3740499  212.50%
+                                                      Cuts: 6                  
+  22218  5356    infeasible              8.0000       25.0000  3728343  212.50%
+                                                      Cuts: 2                  
+  22477  5389       25.0000   108        8.0000       25.0000  3832918  212.50%
+  22780  5407       24.9643   144        8.0000       25.0000  3878527  212.50%
+                                                      Cuts: 5                  
+  22973  5461       25.0000   160        8.0000       25.0000  3942361  212.50%
+                                                   MIRcuts: 2                  
+  23164  5489       24.0000   110        8.0000       25.0000  3970100  212.50%
+                                                      Cuts: 6                  
+  23343  5487    infeasible              8.0000       25.0000  4005667  212.50%
+                                                    Covers: 1                  
+  23538  5511       25.0000   142        8.0000       25.0000  4042767  212.50%
+Elapsed time = 194.92 sec. (84665.47 ticks, tree = 122.47 MB)
+  23753  5548       25.0000   145        8.0000       25.0000  4102236  212.50%
+                                                    Covers: 2                  
+  24020  5559       23.9265   161        8.0000       25.0000  4133905  212.50%
+                                                      Cuts: 4                  
+  24313  5672       25.0000   130        8.0000       25.0000  4201687  212.50%
+                                                    Covers: 2                  
+  24544  5740       25.0000   104        8.0000       25.0000  4269881  212.50%
+  24769  5802    infeasible              8.0000       25.0000  4354107  212.50%
+                                                   MIRcuts: 1                  
+  25015  5818       24.0000   108        8.0000       25.0000  4359861  212.50%
+                                                  Impl Bds: 2                  
+  25264  5871       25.0000   128        8.0000       25.0000  4409211  212.50%
+  25499  5921       25.0000   115        8.0000       25.0000  4475191  212.50%
+  25767  5953       22.0000   167        8.0000       25.0000  4521153  212.50%
+                                                      Cuts: 3                  
+  26674  6238       24.0000   124        8.0000       25.0000  4768629  212.50%
+                                                     Cuts: 13                  
+Elapsed time = 223.77 sec. (97106.69 ticks, tree = 139.12 MB)
+  27381  6461    infeasible              8.0000       25.0000  4980284  212.50%
+                                                     Cuts: 15                  
+  28006  6643       24.0000   148        8.0000       25.0000  5132365  212.50%
+                                                     Cuts: 15                  
+  28911  6957    infeasible              8.0000       25.0000  5285255  212.50%
+                                                      Cuts: 8                  
+  29922  7428    infeasible              8.0000       25.0000  5477806  212.50%
+                                                      Cuts: 9                  
+  30827  7856       24.0000   137        8.0000       25.0000  5709331  212.50%
+                                                     Cuts: 11                  
+  31635  8090    infeasible              8.0000       25.0000  5843088  212.50%
+                                                     Cuts: 14                  
+  32391  8406       20.0000    77        8.0000       25.0000  6115501  212.50%
+                                                      Cuts: 5                  
+  33263  8689       19.0000    91        8.0000       25.0000  6305370  212.50%
+                                                      Cuts: 9                  
+  34192  8922       24.0000   107        8.0000       25.0000  6490871  212.50%
+                                                      Cuts: 3                  
+  35127  9200       24.0000   120        8.0000       25.0000  6673981  212.50%
+                                                    Covers: 3                  
+Elapsed time = 287.09 sec. (135299.25 ticks, tree = 213.30 MB)
+  35923  9399       24.9957   146        8.0000       25.0000  6842661  212.50%
+                                                      Cuts: 2                  
+* 36579+ 9635                            9.0000       25.0000           177.78%
+                                                  Impl Bds: 1                  
+Found incumbent of value 9.000000 after 297.31 sec. (141893.40 ticks)
+  36774  9731    infeasible              9.0000       25.0000  7140466  177.78%
+* 36817+ 9672                           10.0000       25.0000           150.00%
+Found incumbent of value 10.000000 after 299.98 sec. (143182.49 ticks)
+  37304  9849       25.0000   166       10.0000       25.0000  7219133  150.00%
+                                                  Impl Bds: 4                  
+  38034 10099    infeasible             10.0000       25.0000  7420478  150.00%
+                                                 Impl Bds: 10                  
+  38914 10317       23.9824   167       10.0000       25.0000  7643193  150.00%
+                                                      Cuts: 8                  
+  39791 10691       23.6402   174       10.0000       25.0000  7872214  150.00%
+                                                      Cuts: 5                  
+  40636 10889       23.9655   155       10.0000       25.0000  7948968  150.00%
+                                                      Cuts: 8                  
+  41501 11276       24.9981   176       10.0000       25.0000  8170018  150.00%
+                                                     Cuts: 19                  
+  42459 11685       25.0000   143       10.0000       25.0000  8440112  150.00%
+                                                  Impl Bds: 5                  
+  43335 11988       23.9828   142       10.0000       25.0000  8609114  150.00%
+                                                      Cuts: 4                  
+Elapsed time = 349.78 sec. (173494.92 ticks, tree = 279.45 MB)
+  44176 12303       23.0000   137       10.0000       25.0000  8829737  150.00%
+                                                      Cuts: 6                  
+  44961 12726       22.0000   105       10.0000       25.0000  9061104  150.00%
+                                                     Cuts: 10                  
+  45707 12759       25.0000   139       10.0000       25.0000  9112554  150.00%
+                                                      Cuts: 4                  
+  46558 13201       25.0000   137       10.0000       25.0000  9406541  150.00%
+                                                      Cuts: 9                  
+  47281 13568       22.9091   119       10.0000       25.0000  9630579  150.00%
+                                                      Cuts: 8                  
+  48037 13848       23.0000   138       10.0000       25.0000  9757467  150.00%
+                                                  Impl Bds: 4                  
+  48870 13921       22.9583   154       10.0000       25.0000  9814433  150.00%
+                                                    Covers: 1                  
+  49771 14285       22.3333   118       10.0000       25.0000 10048915  150.00%
+  50677 14778       22.0000   104       10.0000       25.0000 10381661  150.00%
+                                                      Cuts: 5                  
+
+GUB cover cuts applied:  77
+Cover cuts applied:  109
+Implied bound cuts applied:  249
+Flow cuts applied:  34
+Mixed integer rounding cuts applied:  160
+Gomory fractional cuts applied:  15
+
+Root node processing (before b&c):
+  Real time             =    2.34 sec. (1037.47 ticks)
+Parallel b&c, 8 threads:
+  Real time             =  420.39 sec. (208432.19 ticks)
+  Sync time (average)   =   26.14 sec.
+  Wait time (average)   =    0.01 sec.
+                          ------------
+Total (root+branch&cut) =  422.73 sec. (209469.66 ticks)
+
+--- MIP status (113): aborted.
+--- Cplex Time: 422.73sec (det. 209469.66 ticks)
+
+--- Returning a primal only solution to GAMS (marginals all set to NA).
+
+Problem aborted
+MIP Solution:           10.000000    (1.05418e+07 iterations, 51020 nodes)
+
+Best possible:          25.000000
+Absolute gap:           15.000000
+Relative gap:            0.600000
+
+--- Reading solution for model denomination
+--- Solver did not provide marginals for model denomination
+--- denomination.gms(209) 5 Mb  423 secs
+--- Executing after solve: elapsed 0:07:03.812
+--- denomination.gms(332) 7 Mb
+--- Putfile boardOut C:\Users\bisma\Dropbox\Apps\Overleaf\Parth ITED\Gams\denomination_board.csv
+--- Putfile sequenceOut C:\Users\bisma\Dropbox\Apps\Overleaf\Parth ITED\Gams\denomination_sequence.csv
+--- Putfile arcOut C:\Users\bisma\Dropbox\Apps\Overleaf\Parth ITED\Gams\denomination_arcs.csv
+*** Status: Normal completion
+--- Job denomination.gms Stop 08/04/26 11:59:32 elapsed 0:07:03.831

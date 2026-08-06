@@ -1,0 +1,45 @@
+B 3 C o m p i l a t i o n
+B 337 Range Statistics    SOLVE denomination Using MIP From line 209
+B 348 Model Statistics    SOLVE denomination Using MIP From line 209
+B 361 Solution Report     SOLVE denomination Using MIP From line 209
+F 379 objectiveDef
+F 381 zDefinition
+F 406 dDefinition
+F 431 assignment
+F 456 linkAppear1
+F 861 linkAppear2
+F 886 contiguity
+F 910 orientation1
+F 970 orientation2
+F 1030 orientation3
+F 1090 orderBounds
+F 1115 acyclicity
+F 1230 valueOrder
+F 1345 contribution1
+F 1460 contribution2
+F 1575 contribution3
+F 1690 neighborhoodLB
+F 2075 neighborhoodUB
+F 2460 nullRule
+F 2577 firstDenomination
+G 2579 x
+G 2984 y
+G 3009 p
+G 3124 z
+G 3149 d
+G 3174 tau
+G 3199 w
+G 3316 objective
+B 3324 E x e c u t i o n
+I 3326 denomination
+I 3327 denomination
+I 3328 objective
+I 3329 article3x3Claim
+I 3330 article3x3Match
+I 3331 delta
+I 3341 bigM
+I 3351 board
+I 3361 stepOf
+I 3371 tau
+I 3381 predecessorSum
+I 3392 cellResidual

@@ -41,7 +41,7 @@ The repository is structured as follows:
     for $m \times n$ grids, indexed by `m`, `n`, `cells` ($=mn$), and `kmax`. To load it, we
     provide the function `load_kmax_table` in `utils.py`.
 
-- `milp_and_enumerator`: This folder contains the main part of the code. We briefly
+- `codes`: This folder contains the main part of the code. We briefly
   describe the purpose of each file:
   - `denomination_ilp.py`: the exact MILP formulation of Denomination and a `pulp`-based
     solver for it (function `solve_and_extract`), including reconstruction of a legal
@@ -59,6 +59,22 @@ The repository is structured as follows:
     adjacency, the rectangle's symmetry group (used to deduplicate reachable states in
     `bruteforce.py`), board rendering, and the `data/kmax_table.csv` loader.
   - `main.py`: a concrete example of how to run the code end to end (see below).
+- `Gams`: 
+  - `denomination_arcs.csv`: 
+  - `denomination_board.csv`:
+  - `denomination_sequence.csv`:
+  - `denomination_game.py`:
+  - `denomination.gms`:
+  - `denomination.lst`:
+  - `denomination.lxi`:
+  - `denomination.~log`:
+  - `denomination.log~1`:
+  - `denomination.log~2`:
+  - `denomination.log~3`:
+  
+
+
+
 
 ## Example
 

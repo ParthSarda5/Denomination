@@ -1,0 +1,3416 @@
+GAMS 54.2.1  d9889eb3 Jul 13, 2026          WEX-WEI x86 64bit/MS Windows - 08/04/26 23:30:07 Page 1
+Denomination puzzle: exact MILP formulation
+C o m p i l a t i o n
+
+
+   2   
+      This program implements the formulation with variables
+          x(v,k), y(k), p(u,v), tau(v), and w(u,v)
+      for an m-by-n king grid.
+       
+      The two implementation identities
+          z(v) = sum(k, x(v,k))
+          d(v) = sum(k, ord(k)*x(v,k))
+      are included explicitly because z and d are used throughout the model.
+       
+      Default instance: 3 by 3.
+      Examples:
+          gams denomination.gms
+          gams denomination.gms --M=4 --N=4
+          gams denomination.gms --M=4 --N=4 --SOLVER=cplex
+       
+      The program writes:
+          denomination_board.csv
+          denomination_sequence.csv
+          denomination_arcs.csv
+  24   
+  25   
+  26  options
+  27  mip = gurobi,
+  28  OptCA = 0,
+  29  optcr = 0
+  30  ;
+  31   
+  32   
+  33   
+  37   
+  38   
+  39  Sets
+  40      c       columns                    / c1*c4 /
+  41      r       rows                       / r1*r5 /
+  42      k       possible denominations     / k1*k20 /
+  43      s       possible placement steps   / s1*s20 /;
+  44   
+  45  Alias (c,cc), (r,rr);
+  46   
+  47  Sets
+  48      arc(c,r,cc,rr)   both orientations of every king-graph edge
+  49      edge(c,r,cc,rr)  one stored orientation of each undirected edge;
+  50   
+  51  Parameters
+  52      cellId(c,r)      lexicographic cell identifier
+  53      denomVal(k)      numerical denomination represented by k
+  54      delta(c,r)       number of king-graph neighbors
+  55      bigM(c,r)        neighborhood big-M value;
+  56   
+  57  Scalars
+  58      numCells         number of cells
+  59      Kbar              denomination upper bound;
+  60   
+  61  numCells   = card(c)*card(r);
+  62  Kbar       = card(k);
+  63  cellId(c,r)= (ord(c)-1)*card(r) + ord(r);
+  64  denomVal(k)= ord(k);
+  65   
+  66  * Chebyshev distance one gives king adjacency.
+  67  arc(c,r,cc,rr) = yes$(
+  68      max(abs(ord(c)-ord(cc)),abs(ord(r)-ord(rr))) = 1
+  69  );
+  70   
+  71  * Keep one orientation of each undirected edge for constraints that
+  72  * involve p(u,v)+p(v,u).
+  73  edge(c,r,cc,rr) = yes$(
+  74      arc(c,r,cc,rr) and cellId(c,r) < cellId(cc,rr)
+  75  );
+  76   
+  77  delta(c,r) = sum((cc,rr)$arc(cc,rr,c,r),1);
+  78  bigM(c,r)  = Kbar*max(1,delta(c,r));
+  79   
+  80  Binary Variables
+  81      x(c,r,k)         1 if cell CR receives denomination k
+  82      y(k)             1 if denomination k appears
+  83      p(c,r,cc,rr)     1 if CR and CCRR are occupied and first precedes second;
+  84   
+  85  Positive Variables
+  86      z(c,r)           occupied-cell indicator, defined from x
+  87      d(c,r)           denomination at a cell, defined from x
+  88      tau(c,r)         ordering potential
+  89      w(c,r,cc,rr)     denomination contributed by first cell to second cell;
+  90   
+  91  Free Variable
+  92      objective;
+  93   
+  94  * Tight bounds and removal of non-edge variables.
+  95  z.up(c,r) = 1;
+  96  d.up(c,r) = Kbar;
+  97  tau.up(c,r) = numCells-1;
+  98  w.up(c,r,cc,rr)$arc(c,r,cc,rr) = Kbar;
+  99  p.fx(c,r,cc,rr)$(not arc(c,r,cc,rr)) = 0;
+ 100  w.fx(c,r,cc,rr)$(not arc(c,r,cc,rr)) = 0;
+ 101   
+ 102  Equations
+ 103      objectiveDef
+ 104      zDefinition(c,r)
+ 105      dDefinition(c,r)
+ 106      assignment(c,r)
+ 107      linkAppear1(c,r,k)
+ 108      linkAppear2(k)
+ 109      contiguity(k)
+ 110      orientation1(c,r,cc,rr)
+ 111      orientation2(c,r,cc,rr)
+ 112      orientation3(c,r,cc,rr)
+ 113      orderBounds(c,r)
+ 114      acyclicity(c,r,cc,rr)
+ 115      valueOrder(c,r,cc,rr)
+ 116      contribution1(c,r,cc,rr)
+ 117      contribution2(c,r,cc,rr)
+ 118      contribution3(c,r,cc,rr)
+ 119      neighborhoodLB(c,r,k)
+ 120      neighborhoodUB(c,r,k)
+ 121      nullRule(c,r,cc,rr)
+ 122      firstDenomination;
+ 123   
+ 124  objectiveDef..
+ 125      objective =e= sum(k,y(k));
+ 126   
+ 127  * Definitions used in the article's constraints.
+ 128  zDefinition(c,r)..
+ 129      z(c,r) =e= sum(k,x(c,r,k));
+ 130   
+ 131  dDefinition(c,r)..
+ 132      d(c,r) =e= sum(k,denomVal(k)*x(c,r,k));
+ 133   
+ 134  * At most one denomination per cell.
+ 135  assignment(c,r)..
+ 136      sum(k,x(c,r,k)) =l= 1;
+ 137   
+ 138  * y(k)=1 exactly when denomination k appears.
+ 139  linkAppear1(c,r,k)..
+ 140      x(c,r,k) =l= y(k);
+ 141   
+ 142  linkAppear2(k)..
+ 143      y(k) =l= sum((c,r),x(c,r,k));
+ 144   
+ 145  * Appearing denominations form the prefix 1,...,k_max.
+ 146  contiguity(k)$(ord(k)>1)..
+ 147      y(k) =l= y(k-1);
+ 148   
+ 149  * Every occupied undirected edge is oriented exactly once;
+ 150  * an edge incident to an empty cell is not oriented.
+ 151  orientation1(c,r,cc,rr)$edge(c,r,cc,rr)..
+ 152      z(c,r) + z(cc,rr) - 1
+ 153      =l= p(c,r,cc,rr) + p(cc,rr,c,r);
+ 154   
+ 155  orientation2(c,r,cc,rr)$edge(c,r,cc,rr)..
+ 156      p(c,r,cc,rr) + p(cc,rr,c,r) =l= z(c,r);
+ 157   
+ 158  orientation3(c,r,cc,rr)$edge(c,r,cc,rr)..
+ 159      p(c,r,cc,rr) + p(cc,rr,c,r) =l= z(cc,rr);
+ 160   
+ 161  * Empty cells have tau=0; occupied cells have tau in [0,N-1].
+ 162  orderBounds(c,r)..
+ 163      tau(c,r) =l= (numCells-1)*z(c,r);
+ 164   
+ 165  * A selected precedence arc strictly increases the potential.
+ 166  acyclicity(c,r,cc,rr)$arc(c,r,cc,rr)..
+ 167      tau(c,r) + 1
+ 168      =l= tau(cc,rr) + numCells*(1-p(c,r,cc,rr));
+ 169   
+ 170  * Along a precedence arc, denomination cannot decrease.
+ 171  valueOrder(c,r,cc,rr)$arc(c,r,cc,rr)..
+ 172      d(c,r)
+ 173      =l= d(cc,rr) + Kbar*(1-p(c,r,cc,rr));
+ 174   
+ 175  * Linearization of w(u,v)=d(u)*p(u,v).
+ 176  contribution1(c,r,cc,rr)$arc(c,r,cc,rr)..
+ 177      w(c,r,cc,rr) =l= Kbar*p(c,r,cc,rr);
+ 178   
+ 179  contribution2(c,r,cc,rr)$arc(c,r,cc,rr)..
+ 180      w(c,r,cc,rr) =l= d(c,r);
+ 181   
+ 182  contribution3(c,r,cc,rr)$arc(c,r,cc,rr)..
+ 183      w(c,r,cc,rr)
+ 184      =g= d(c,r) - Kbar*(1-p(c,r,cc,rr));
+ 185   
+ 186  * A non-null cell receives exactly the sum of earlier neighbors.
+ 187  neighborhoodLB(c,r,k)$(ord(k)>1)..
+ 188      sum((cc,rr)$arc(cc,rr,c,r),w(cc,rr,c,r))
+ 189      =g= denomVal(k) - bigM(c,r)*(1-x(c,r,k));
+ 190   
+ 191  neighborhoodUB(c,r,k)$(ord(k)>1)..
+ 192      sum((cc,rr)$arc(cc,rr,c,r),w(cc,rr,c,r))
+ 193      =l= denomVal(k) + bigM(c,r)*(1-x(c,r,k));
+ 194   
+ 195  * No occupied neighbor may precede a null stone at the destination cell.
+ 196  nullRule(c,r,cc,rr)$arc(c,r,cc,rr)..
+ 197      p(c,r,cc,rr) =l= 1-x(cc,rr,'k1');
+ 198   
+ 199  firstDenomination..
+ 200      y('k1') =e= 1;
+ 201   
+ 202  Model denomination / all /;
+ 203   
+ 204  option optcr  = 0;
+ 205  option reslim = 3600;
+ 206  option limrow = 0;
+ 207  option limcol = 0;
+ 208   
+ 209  Solve denomination using mip maximizing objective;
+ 210   
+ 211  * ----------------------------------------------------------------------
+ 212  * Reconstruct one legal placement sequence.
+ 213  *
+ 214  * Cells are ordered first by final denomination, then by tau, and finally
+ 215  * by cellId.  The value-order and acyclicity constraints ensure that this
+ 216  * respects every selected precedence arc.  Ordering by denomination also
+ 217  * enforces the global prerequisite that 1,...,k-1 appear before k.
+ 218  * ----------------------------------------------------------------------
+ 219  Sets
+ 220      occupied(c,r)
+ 221      remaining(c,r)
+ 222      candidateD(c,r)
+ 223      candidateTau(c,r)
+ 224      chosen(c,r)
+ 225      placement(s,c,r);
+ 226   
+ 227  Parameters
+ 228      board(c,r)       final denomination
+ 229      stepOf(c,r)      reconstructed placement step
+ 230      predecessorSum(c,r)
+ 231      cellResidual(c,r);
+ 232   
+ 233  Scalars
+ 234      minD
+ 235      minTau
+ 236      minId
+ 237      article3x3Claim
+ 238      article3x3Match;
+ 239   
+ 240  board(c,r)    = round(d.l(c,r));
+ 241  occupied(c,r) = yes$(z.l(c,r)>0.5);
+ 242  remaining(c,r)= occupied(c,r);
+ 243  stepOf(c,r)   = 0;
+ 244   
+ 245  loop(s$(card(remaining)>0),
+ 246      minD = smin((c,r)$remaining(c,r),board(c,r));
+ 247   
+ 248      candidateD(c,r) = no;
+ 249      candidateD(c,r) = yes$(remaining(c,r) and board(c,r)=minD);
+ 250   
+ 251      minTau = smin((c,r)$candidateD(c,r),tau.l(c,r));
+ 252   
+ 253      candidateTau(c,r) = no;
+ 254      candidateTau(c,r) = yes$(
+ 255          candidateD(c,r) and abs(tau.l(c,r)-minTau)<1e-7
+ 256      );
+ 257   
+ 258      minId = smin((c,r)$candidateTau(c,r),cellId(c,r));
+ 259   
+ 260      chosen(c,r) = no;
+ 261      chosen(c,r) = yes$(candidateTau(c,r) and cellId(c,r)=minId);
+ 262   
+ 263      placement(s,c,r) = chosen(c,r);
+ 264      stepOf(c,r)$chosen(c,r) = ord(s);
+ 265      remaining(c,r)$chosen(c,r) = no;
+ 266  );
+ 267   
+ 268  predecessorSum(c,r) = sum((cc,rr)$(
+ 269         arc(cc,rr,c,r)
+ 270     and stepOf(cc,rr)>0
+ 271     and stepOf(cc,rr)<stepOf(c,r)
+ 272  ),board(cc,rr));
+ 273   
+ 274  cellResidual(c,r)$occupied(c,r) =
+ 275      predecessorSum(c,r) - board(c,r);
+ 276  cellResidual(c,r)$(occupied(c,r) and board(c,r)=1) =
+ 277      predecessorSum(c,r);
+ 278   
+ 279  * The article's worked 3-by-3 instance reports k_max=7.
+ 280  article3x3Claim = 0;
+ 281  article3x3Claim$((card(c)=3) and (card(r)=3)) = 7;
+ 282  article3x3Match = 1;
+ 283  article3x3Match$(article3x3Claim>0) =
+ 284      abs(objective.l-article3x3Claim)<0.5;
+ 285   
+ 286  Display
+ 287      denomination.modelstat,
+ 288      denomination.solvestat,
+ 289      objective.l,
+ 290      article3x3Claim,
+ 291      article3x3Match,
+ 292      delta,
+ 293      bigM,
+ 294      board,
+ 295      stepOf,
+ 296      tau.l,
+ 297      predecessorSum,
+ 298      cellResidual;
+ 299   
+ 300  * ----------------------------------------------------------------------
+ 301  * Machine-readable output files.
+ 302  * Coordinates follow the article: column increases left-to-right and row
+ 303  * increases bottom-to-top.
+ 304  * ----------------------------------------------------------------------
+ 305  File boardOut / denomination_board.csv /;
+ 306  put boardOut;
+ 307  put 'column,row,denomination,tau,placement_step' /;
+ 308  loop((c,r),
+ 309      put ord(c):0:0, ',', ord(r):0:0, ',', board(c,r):0:0, ',',
+ 310          tau.l(c,r):0:6, ',', stepOf(c,r):0:0 /;
+ 311  );
+ 312  putclose boardOut;
+ 313   
+ 314  File sequenceOut / denomination_sequence.csv /;
+ 315  put sequenceOut;
+ 316  put 'step,column,row,denomination,tau,predecessor_sum' /;
+ 317  loop((s,c,r)$placement(s,c,r),
+ 318      put ord(s):0:0, ',', ord(c):0:0, ',', ord(r):0:0, ',',
+ 319          board(c,r):0:0, ',', tau.l(c,r):0:6, ',',
+ 320          predecessorSum(c,r):0:0 /;
+ 321  );
+ 322  putclose sequenceOut;
+ 323   
+ 324  File arcOut / denomination_arcs.csv /;
+ 325  put arcOut;
+ 326  put 'from_column,from_row,to_column,to_row,from_denomination,contribution' /;
+ 327  loop((c,r,cc,rr)$(arc(c,r,cc,rr) and p.l(c,r,cc,rr)>0.5),
+ 328      put ord(c):0:0, ',', ord(r):0:0, ',',
+ 329          ord(cc):0:0, ',', ord(rr):0:0, ',',
+ 330          board(c,r):0:0, ',', w.l(c,r,cc,rr):0:0 /;
+ 331  );
+ 332  putclose arcOut;
+
+
+COMPILATION TIME     =        0.000 SECONDS      3 MB  54.2.1 d9889eb3 WEX-WEI
+GAMS 54.2.1  d9889eb3 Jul 13, 2026          WEX-WEI x86 64bit/MS Windows - 08/04/26 23:30:07 Page 2
+Denomination puzzle: exact MILP formulation
+Range Statistics    SOLVE denomination Using MIP From line 209
+
+
+RANGE STATISTICS (ABSOLUTE NON-ZERO FINITE VALUES)
+
+RHS       [min, max] : [ 1.000E+00, 1.800E+02] - Zero values observed as well
+Bound     [min, max] : [ 1.000E+00, 2.000E+01] - Zero values observed as well
+Matrix    [min, max] : [ 1.000E+00, 1.600E+02]
+
+GAMS 54.2.1  d9889eb3 Jul 13, 2026          WEX-WEI x86 64bit/MS Windows - 08/04/26 23:30:07 Page 3
+Denomination puzzle: exact MILP formulation
+Model Statistics    SOLVE denomination Using MIP From line 209
+
+
+MODEL STATISTICS
+
+BLOCKS OF EQUATIONS          20     SINGLE EQUATIONS        2,106
+BLOCKS OF VARIABLES           8     SINGLE VARIABLES          701
+NON ZERO ELEMENTS         9,700     DISCRETE VARIABLES        530
+
+
+GENERATION TIME      =        0.032 SECONDS      5 MB  54.2.1 d9889eb3 WEX-WEI
+GAMS 54.2.1  d9889eb3 Jul 13, 2026          WEX-WEI x86 64bit/MS Windows - 08/04/26 23:30:07 Page 4
+Denomination puzzle: exact MILP formulation
+Solution Report     SOLVE denomination Using MIP From line 209
+
+
+               S O L V E      S U M M A R Y
+
+     MODEL   denomination        OBJECTIVE  objective
+     TYPE    MIP                 DIRECTION  MAXIMIZE
+     SOLVER  GUROBI              FROM LINE  209
+
+**** SOLVER STATUS     3 Resource Interrupt
+**** MODEL STATUS      7 Feasible Solution
+**** OBJECTIVE VALUE               11.0000
+
+ RESOURCE USAGE, LIMIT       3600.028      3600.000
+ ITERATION COUNT, LIMIT 138703950    2147483647
+
+                           LOWER          LEVEL          UPPER
+
+---- EQU objective~          .              .              .          
+
+---- EQU zDefinition  
+
+             LOWER          LEVEL          UPPER
+
+c1.r1          .              .              .          
+c1.r2          .              .              .          
+c1.r3          .              .              .          
+c1.r4          .              .              .          
+c1.r5          .              .              .          
+c2.r1          .              .              .          
+c2.r2          .              .              .          
+c2.r3          .              .              .          
+c2.r4          .              .              .          
+c2.r5          .              .              .          
+c3.r1          .              .              .          
+c3.r2          .              .              .          
+c3.r3          .              .              .          
+c3.r4          .              .              .          
+c3.r5          .              .              .          
+c4.r1          .              .              .          
+c4.r2          .              .              .          
+c4.r3          .              .              .          
+c4.r4          .              .              .          
+c4.r5          .              .              .          
+
+---- EQU dDefinition  
+
+             LOWER          LEVEL          UPPER
+
+c1.r1          .              .              .          
+c1.r2          .              .              .          
+c1.r3          .              .              .          
+c1.r4          .              .              .          
+c1.r5          .              .              .          
+c2.r1          .              .              .          
+c2.r2          .              .              .          
+c2.r3          .              .              .          
+c2.r4          .              .              .          
+c2.r5          .              .              .          
+c3.r1          .              .              .          
+c3.r2          .              .              .          
+c3.r3          .              .              .          
+c3.r4          .              .              .          
+c3.r5          .              .              .          
+c4.r1          .              .              .          
+c4.r2          .              .              .          
+c4.r3          .              .              .          
+c4.r4          .              .              .          
+c4.r5          .              .              .          
+
+---- EQU assignment  
+
+             LOWER          LEVEL          UPPER
+
+c1.r1        -INF            1.0000         1.0000      
+c1.r2        -INF            1.0000         1.0000      
+c1.r3        -INF             .             1.0000      
+c1.r4        -INF             .             1.0000      
+c1.r5        -INF             .             1.0000      
+c2.r1        -INF            1.0000         1.0000      
+c2.r2        -INF            1.0000         1.0000      
+c2.r3        -INF            1.0000         1.0000      
+c2.r4        -INF            1.0000         1.0000      
+c2.r5        -INF            1.0000         1.0000      
+c3.r1        -INF            1.0000         1.0000      
+c3.r2        -INF            1.0000         1.0000      
+c3.r3        -INF             .             1.0000      
+c3.r4        -INF             .             1.0000      
+c3.r5        -INF            1.0000         1.0000      
+c4.r1        -INF            1.0000         1.0000      
+c4.r2        -INF            1.0000         1.0000      
+c4.r3        -INF            1.0000         1.0000      
+c4.r4        -INF            1.0000         1.0000      
+c4.r5        -INF            1.0000         1.0000      
+
+---- EQU linkAppear1  
+
+                 LOWER          LEVEL          UPPER
+
+c1.r1.k1         -INF           -1.0000          .          
+c1.r1.k2         -INF           -1.0000          .          
+c1.r1.k3         -INF           -1.0000          .          
+c1.r1.k4         -INF           -1.0000          .          
+c1.r1.k5         -INF           -1.0000          .          
+c1.r1.k6         -INF           -1.0000          .          
+c1.r1.k7         -INF           -1.0000          .          
+c1.r1.k8         -INF           -1.0000          .          
+c1.r1.k9         -INF           -1.0000          .          
+c1.r1.k10        -INF             .              .          
+c1.r1.k11        -INF           -1.0000          .          
+c1.r1.k12        -INF             .              .          
+c1.r1.k13        -INF             .              .          
+c1.r1.k14        -INF             .              .          
+c1.r1.k15        -INF             .              .          
+c1.r1.k16        -INF             .              .          
+c1.r1.k17        -INF             .              .          
+c1.r1.k18        -INF             .              .          
+c1.r1.k19        -INF             .              .          
+c1.r1.k20        -INF             .              .          
+c1.r2.k1         -INF             .              .          
+c1.r2.k2         -INF           -1.0000          .          
+c1.r2.k3         -INF           -1.0000          .          
+c1.r2.k4         -INF           -1.0000          .          
+c1.r2.k5         -INF           -1.0000          .          
+c1.r2.k6         -INF           -1.0000          .          
+c1.r2.k7         -INF           -1.0000          .          
+c1.r2.k8         -INF           -1.0000          .          
+c1.r2.k9         -INF           -1.0000          .          
+c1.r2.k10        -INF           -1.0000          .          
+c1.r2.k11        -INF           -1.0000          .          
+c1.r2.k12        -INF             .              .          
+c1.r2.k13        -INF             .              .          
+c1.r2.k14        -INF             .              .          
+c1.r2.k15        -INF             .              .          
+c1.r2.k16        -INF             .              .          
+c1.r2.k17        -INF             .              .          
+c1.r2.k18        -INF             .              .          
+c1.r2.k19        -INF             .              .          
+c1.r2.k20        -INF             .              .          
+c1.r3.k1         -INF           -1.0000          .          
+c1.r3.k2         -INF           -1.0000          .          
+c1.r3.k3         -INF           -1.0000          .          
+c1.r3.k4         -INF           -1.0000          .          
+c1.r3.k5         -INF           -1.0000          .          
+c1.r3.k6         -INF           -1.0000          .          
+c1.r3.k7         -INF           -1.0000          .          
+c1.r3.k8         -INF           -1.0000          .          
+c1.r3.k9         -INF           -1.0000          .          
+c1.r3.k10        -INF           -1.0000          .          
+c1.r3.k11        -INF           -1.0000          .          
+c1.r3.k12        -INF             .              .          
+c1.r3.k13        -INF             .              .          
+c1.r3.k14        -INF             .              .          
+c1.r3.k15        -INF             .              .          
+c1.r3.k16        -INF             .              .          
+c1.r3.k17        -INF             .              .          
+c1.r3.k18        -INF             .              .          
+c1.r3.k19        -INF             .              .          
+c1.r3.k20        -INF             .              .          
+c1.r4.k1         -INF           -1.0000          .          
+c1.r4.k2         -INF           -1.0000          .          
+c1.r4.k3         -INF           -1.0000          .          
+c1.r4.k4         -INF           -1.0000          .          
+c1.r4.k5         -INF           -1.0000          .          
+c1.r4.k6         -INF           -1.0000          .          
+c1.r4.k7         -INF           -1.0000          .          
+c1.r4.k8         -INF           -1.0000          .          
+c1.r4.k9         -INF           -1.0000          .          
+c1.r4.k10        -INF           -1.0000          .          
+c1.r4.k11        -INF           -1.0000          .          
+c1.r4.k12        -INF             .              .          
+c1.r4.k13        -INF             .              .          
+c1.r4.k14        -INF             .              .          
+c1.r4.k15        -INF             .              .          
+c1.r4.k16        -INF             .              .          
+c1.r4.k17        -INF             .              .          
+c1.r4.k18        -INF             .              .          
+c1.r4.k19        -INF             .              .          
+c1.r4.k20        -INF             .              .          
+c1.r5.k1         -INF           -1.0000          .          
+c1.r5.k2         -INF           -1.0000          .          
+c1.r5.k3         -INF           -1.0000          .          
+c1.r5.k4         -INF           -1.0000          .          
+c1.r5.k5         -INF           -1.0000          .          
+c1.r5.k6         -INF           -1.0000          .          
+c1.r5.k7         -INF           -1.0000          .          
+c1.r5.k8         -INF           -1.0000          .          
+c1.r5.k9         -INF           -1.0000          .          
+c1.r5.k10        -INF           -1.0000          .          
+c1.r5.k11        -INF           -1.0000          .          
+c1.r5.k12        -INF             .              .          
+c1.r5.k13        -INF             .              .          
+c1.r5.k14        -INF             .              .          
+c1.r5.k15        -INF             .              .          
+c1.r5.k16        -INF             .              .          
+c1.r5.k17        -INF             .              .          
+c1.r5.k18        -INF             .              .          
+c1.r5.k19        -INF             .              .          
+c1.r5.k20        -INF             .              .          
+c2.r1.k1         -INF           -1.0000          .          
+c2.r1.k2         -INF           -1.0000          .          
+c2.r1.k3         -INF           -1.0000          .          
+c2.r1.k4         -INF           -1.0000          .          
+c2.r1.k5         -INF           -1.0000          .          
+c2.r1.k6         -INF           -1.0000          .          
+c2.r1.k7         -INF             .              .          
+c2.r1.k8         -INF           -1.0000          .          
+c2.r1.k9         -INF           -1.0000          .          
+c2.r1.k10        -INF           -1.0000          .          
+c2.r1.k11        -INF           -1.0000          .          
+c2.r1.k12        -INF             .              .          
+c2.r1.k13        -INF             .              .          
+c2.r1.k14        -INF             .              .          
+c2.r1.k15        -INF             .              .          
+c2.r1.k16        -INF             .              .          
+c2.r1.k17        -INF             .              .          
+c2.r1.k18        -INF             .              .          
+c2.r1.k19        -INF             .              .          
+c2.r1.k20        -INF             .              .          
+c2.r2.k1         -INF           -1.0000          .          
+c2.r2.k2         -INF             .              .          
+c2.r2.k3         -INF           -1.0000          .          
+c2.r2.k4         -INF           -1.0000          .          
+c2.r2.k5         -INF           -1.0000          .          
+c2.r2.k6         -INF           -1.0000          .          
+c2.r2.k7         -INF           -1.0000          .          
+c2.r2.k8         -INF           -1.0000          .          
+c2.r2.k9         -INF           -1.0000          .          
+c2.r2.k10        -INF           -1.0000          .          
+c2.r2.k11        -INF           -1.0000          .          
+c2.r2.k12        -INF             .              .          
+c2.r2.k13        -INF             .              .          
+c2.r2.k14        -INF             .              .          
+c2.r2.k15        -INF             .              .          
+c2.r2.k16        -INF             .              .          
+c2.r2.k17        -INF             .              .          
+c2.r2.k18        -INF             .              .          
+c2.r2.k19        -INF             .              .          
+c2.r2.k20        -INF             .              .          
+c2.r3.k1         -INF           -1.0000          .          
+c2.r3.k2         -INF           -1.0000          .          
+c2.r3.k3         -INF           -1.0000          .          
+c2.r3.k4         -INF             .              .          
+c2.r3.k5         -INF           -1.0000          .          
+c2.r3.k6         -INF           -1.0000          .          
+c2.r3.k7         -INF           -1.0000          .          
+c2.r3.k8         -INF           -1.0000          .          
+c2.r3.k9         -INF           -1.0000          .          
+c2.r3.k10        -INF           -1.0000          .          
+c2.r3.k11        -INF           -1.0000          .          
+c2.r3.k12        -INF             .              .          
+c2.r3.k13        -INF             .              .          
+c2.r3.k14        -INF             .              .          
+c2.r3.k15        -INF             .              .          
+c2.r3.k16        -INF             .              .          
+c2.r3.k17        -INF             .              .          
+c2.r3.k18        -INF             .              .          
+c2.r3.k19        -INF             .              .          
+c2.r3.k20        -INF             .              .          
+c2.r4.k1         -INF           -1.0000          .          
+c2.r4.k2         -INF           -1.0000          .          
+c2.r4.k3         -INF           -1.0000          .          
+c2.r4.k4         -INF             .              .          
+c2.r4.k5         -INF           -1.0000          .          
+c2.r4.k6         -INF           -1.0000          .          
+c2.r4.k7         -INF           -1.0000          .          
+c2.r4.k8         -INF           -1.0000          .          
+c2.r4.k9         -INF           -1.0000          .          
+c2.r4.k10        -INF           -1.0000          .          
+c2.r4.k11        -INF           -1.0000          .          
+c2.r4.k12        -INF             .              .          
+c2.r4.k13        -INF             .              .          
+c2.r4.k14        -INF             .              .          
+c2.r4.k15        -INF             .              .          
+c2.r4.k16        -INF             .              .          
+c2.r4.k17        -INF             .              .          
+c2.r4.k18        -INF             .              .          
+c2.r4.k19        -INF             .              .          
+c2.r4.k20        -INF             .              .          
+c2.r5.k1         -INF           -1.0000          .          
+c2.r5.k2         -INF           -1.0000          .          
+c2.r5.k3         -INF           -1.0000          .          
+c2.r5.k4         -INF           -1.0000          .          
+c2.r5.k5         -INF           -1.0000          .          
+c2.r5.k6         -INF           -1.0000          .          
+c2.r5.k7         -INF           -1.0000          .          
+c2.r5.k8         -INF           -1.0000          .          
+c2.r5.k9         -INF             .              .          
+c2.r5.k10        -INF           -1.0000          .          
+c2.r5.k11        -INF           -1.0000          .          
+c2.r5.k12        -INF             .              .          
+c2.r5.k13        -INF             .              .          
+c2.r5.k14        -INF             .              .          
+c2.r5.k15        -INF             .              .          
+c2.r5.k16        -INF             .              .          
+c2.r5.k17        -INF             .              .          
+c2.r5.k18        -INF             .              .          
+c2.r5.k19        -INF             .              .          
+c2.r5.k20        -INF             .              .          
+c3.r1.k1         -INF           -1.0000          .          
+c3.r1.k2         -INF           -1.0000          .          
+c3.r1.k3         -INF             .              .          
+c3.r1.k4         -INF           -1.0000          .          
+c3.r1.k5         -INF           -1.0000          .          
+c3.r1.k6         -INF           -1.0000          .          
+c3.r1.k7         -INF           -1.0000          .          
+c3.r1.k8         -INF           -1.0000          .          
+c3.r1.k9         -INF           -1.0000          .          
+c3.r1.k10        -INF           -1.0000          .          
+c3.r1.k11        -INF           -1.0000          .          
+c3.r1.k12        -INF             .              .          
+c3.r1.k13        -INF             .              .          
+c3.r1.k14        -INF             .              .          
+c3.r1.k15        -INF             .              .          
+c3.r1.k16        -INF             .              .          
+c3.r1.k17        -INF             .              .          
+c3.r1.k18        -INF             .              .          
+c3.r1.k19        -INF             .              .          
+c3.r1.k20        -INF             .              .          
+c3.r2.k1         -INF             .              .          
+c3.r2.k2         -INF           -1.0000          .          
+c3.r2.k3         -INF           -1.0000          .          
+c3.r2.k4         -INF           -1.0000          .          
+c3.r2.k5         -INF           -1.0000          .          
+c3.r2.k6         -INF           -1.0000          .          
+c3.r2.k7         -INF           -1.0000          .          
+c3.r2.k8         -INF           -1.0000          .          
+c3.r2.k9         -INF           -1.0000          .          
+c3.r2.k10        -INF           -1.0000          .          
+c3.r2.k11        -INF           -1.0000          .          
+c3.r2.k12        -INF             .              .          
+c3.r2.k13        -INF             .              .          
+c3.r2.k14        -INF             .              .          
+c3.r2.k15        -INF             .              .          
+c3.r2.k16        -INF             .              .          
+c3.r2.k17        -INF             .              .          
+c3.r2.k18        -INF             .              .          
+c3.r2.k19        -INF             .              .          
+c3.r2.k20        -INF             .              .          
+c3.r3.k1         -INF           -1.0000          .          
+c3.r3.k2         -INF           -1.0000          .          
+c3.r3.k3         -INF           -1.0000          .          
+c3.r3.k4         -INF           -1.0000          .          
+c3.r3.k5         -INF           -1.0000          .          
+c3.r3.k6         -INF           -1.0000          .          
+c3.r3.k7         -INF           -1.0000          .          
+c3.r3.k8         -INF           -1.0000          .          
+c3.r3.k9         -INF           -1.0000          .          
+c3.r3.k10        -INF           -1.0000          .          
+c3.r3.k11        -INF           -1.0000          .          
+c3.r3.k12        -INF             .              .          
+c3.r3.k13        -INF             .              .          
+c3.r3.k14        -INF             .              .          
+c3.r3.k15        -INF             .              .          
+c3.r3.k16        -INF             .              .          
+c3.r3.k17        -INF             .              .          
+c3.r3.k18        -INF             .              .          
+c3.r3.k19        -INF             .              .          
+c3.r3.k20        -INF             .              .          
+c3.r4.k1         -INF           -1.0000          .          
+c3.r4.k2         -INF           -1.0000          .          
+c3.r4.k3         -INF           -1.0000          .          
+c3.r4.k4         -INF           -1.0000          .          
+c3.r4.k5         -INF           -1.0000          .          
+c3.r4.k6         -INF           -1.0000          .          
+c3.r4.k7         -INF           -1.0000          .          
+c3.r4.k8         -INF           -1.0000          .          
+c3.r4.k9         -INF           -1.0000          .          
+c3.r4.k10        -INF           -1.0000          .          
+c3.r4.k11        -INF           -1.0000          .          
+c3.r4.k12        -INF             .              .          
+c3.r4.k13        -INF             .              .          
+c3.r4.k14        -INF             .              .          
+c3.r4.k15        -INF             .              .          
+c3.r4.k16        -INF             .              .          
+c3.r4.k17        -INF             .              .          
+c3.r4.k18        -INF             .              .          
+c3.r4.k19        -INF             .              .          
+c3.r4.k20        -INF             .              .          
+c3.r5.k1         -INF           -1.0000          .          
+c3.r5.k2         -INF           -1.0000          .          
+c3.r5.k3         -INF           -1.0000          .          
+c3.r5.k4         -INF           -1.0000          .          
+c3.r5.k5         -INF             .              .          
+c3.r5.k6         -INF           -1.0000          .          
+c3.r5.k7         -INF           -1.0000          .          
+c3.r5.k8         -INF           -1.0000          .          
+c3.r5.k9         -INF           -1.0000          .          
+c3.r5.k10        -INF           -1.0000          .          
+c3.r5.k11        -INF           -1.0000          .          
+c3.r5.k12        -INF             .              .          
+c3.r5.k13        -INF             .              .          
+c3.r5.k14        -INF             .              .          
+c3.r5.k15        -INF             .              .          
+c3.r5.k16        -INF             .              .          
+c3.r5.k17        -INF             .              .          
+c3.r5.k18        -INF             .              .          
+c3.r5.k19        -INF             .              .          
+c3.r5.k20        -INF             .              .          
+c4.r1.k1         -INF           -1.0000          .          
+c4.r1.k2         -INF           -1.0000          .          
+c4.r1.k3         -INF           -1.0000          .          
+c4.r1.k4         -INF           -1.0000          .          
+c4.r1.k5         -INF           -1.0000          .          
+c4.r1.k6         -INF           -1.0000          .          
+c4.r1.k7         -INF           -1.0000          .          
+c4.r1.k8         -INF             .              .          
+c4.r1.k9         -INF           -1.0000          .          
+c4.r1.k10        -INF           -1.0000          .          
+c4.r1.k11        -INF           -1.0000          .          
+c4.r1.k12        -INF             .              .          
+c4.r1.k13        -INF             .              .          
+c4.r1.k14        -INF             .              .          
+c4.r1.k15        -INF             .              .          
+c4.r1.k16        -INF             .              .          
+c4.r1.k17        -INF             .              .          
+c4.r1.k18        -INF             .              .          
+c4.r1.k19        -INF             .              .          
+c4.r1.k20        -INF             .              .          
+c4.r2.k1         -INF           -1.0000          .          
+c4.r2.k2         -INF           -1.0000          .          
+c4.r2.k3         -INF           -1.0000          .          
+c4.r2.k4         -INF             .              .          
+c4.r2.k5         -INF           -1.0000          .          
+c4.r2.k6         -INF           -1.0000          .          
+c4.r2.k7         -INF           -1.0000          .          
+c4.r2.k8         -INF           -1.0000          .          
+c4.r2.k9         -INF           -1.0000          .          
+c4.r2.k10        -INF           -1.0000          .          
+c4.r2.k11        -INF           -1.0000          .          
+c4.r2.k12        -INF             .              .          
+c4.r2.k13        -INF             .              .          
+c4.r2.k14        -INF             .              .          
+c4.r2.k15        -INF             .              .          
+c4.r2.k16        -INF             .              .          
+c4.r2.k17        -INF             .              .          
+c4.r2.k18        -INF             .              .          
+c4.r2.k19        -INF             .              .          
+c4.r2.k20        -INF             .              .          
+c4.r3.k1         -INF           -1.0000          .          
+c4.r3.k2         -INF           -1.0000          .          
+c4.r3.k3         -INF           -1.0000          .          
+c4.r3.k4         -INF           -1.0000          .          
+c4.r3.k5         -INF           -1.0000          .          
+c4.r3.k6         -INF           -1.0000          .          
+c4.r3.k7         -INF           -1.0000          .          
+c4.r3.k8         -INF           -1.0000          .          
+c4.r3.k9         -INF           -1.0000          .          
+c4.r3.k10        -INF           -1.0000          .          
+c4.r3.k11        -INF             .              .          
+c4.r3.k12        -INF             .              .          
+c4.r3.k13        -INF             .              .          
+c4.r3.k14        -INF             .              .          
+c4.r3.k15        -INF             .              .          
+c4.r3.k16        -INF             .              .          
+c4.r3.k17        -INF             .              .          
+c4.r3.k18        -INF             .              .          
+c4.r3.k19        -INF             .              .          
+c4.r3.k20        -INF             .              .          
+c4.r4.k1         -INF           -1.0000          .          
+c4.r4.k2         -INF           -1.0000          .          
+c4.r4.k3         -INF           -1.0000          .          
+c4.r4.k4         -INF           -1.0000          .          
+c4.r4.k5         -INF           -1.0000          .          
+c4.r4.k6         -INF             .              .          
+c4.r4.k7         -INF           -1.0000          .          
+c4.r4.k8         -INF           -1.0000          .          
+c4.r4.k9         -INF           -1.0000          .          
+c4.r4.k10        -INF           -1.0000          .          
+c4.r4.k11        -INF           -1.0000          .          
+c4.r4.k12        -INF             .              .          
+c4.r4.k13        -INF             .              .          
+c4.r4.k14        -INF             .              .          
+c4.r4.k15        -INF             .              .          
+c4.r4.k16        -INF             .              .          
+c4.r4.k17        -INF             .              .          
+c4.r4.k18        -INF             .              .          
+c4.r4.k19        -INF             .              .          
+c4.r4.k20        -INF             .              .          
+c4.r5.k1         -INF             .              .          
+c4.r5.k2         -INF           -1.0000          .          
+c4.r5.k3         -INF           -1.0000          .          
+c4.r5.k4         -INF           -1.0000          .          
+c4.r5.k5         -INF           -1.0000          .          
+c4.r5.k6         -INF           -1.0000          .          
+c4.r5.k7         -INF           -1.0000          .          
+c4.r5.k8         -INF           -1.0000          .          
+c4.r5.k9         -INF           -1.0000          .          
+c4.r5.k10        -INF           -1.0000          .          
+c4.r5.k11        -INF           -1.0000          .          
+c4.r5.k12        -INF             .              .          
+c4.r5.k13        -INF             .              .          
+c4.r5.k14        -INF             .              .          
+c4.r5.k15        -INF             .              .          
+c4.r5.k16        -INF             .              .          
+c4.r5.k17        -INF             .              .          
+c4.r5.k18        -INF             .              .          
+c4.r5.k19        -INF             .              .          
+c4.r5.k20        -INF             .              .          
+
+---- EQU linkAppear2  
+
+           LOWER          LEVEL          UPPER
+
+k1         -INF           -2.0000          .          
+k2         -INF             .              .          
+k3         -INF             .              .          
+k4         -INF           -2.0000          .          
+k5         -INF             .              .          
+k6         -INF             .              .          
+k7         -INF             .              .          
+k8         -INF             .              .          
+k9         -INF             .              .          
+k10        -INF             .              .          
+k11        -INF             .              .          
+k12        -INF             .              .          
+k13        -INF             .              .          
+k14        -INF             .              .          
+k15        -INF             .              .          
+k16        -INF             .              .          
+k17        -INF             .              .          
+k18        -INF             .              .          
+k19        -INF             .              .          
+k20        -INF             .              .          
+
+---- EQU contiguity  
+
+           LOWER          LEVEL          UPPER
+
+k2         -INF             .              .          
+k3         -INF             .              .          
+k4         -INF             .              .          
+k5         -INF             .              .          
+k6         -INF             .              .          
+k7         -INF             .              .          
+k8         -INF             .              .          
+k9         -INF             .              .          
+k10        -INF             .              .          
+k11        -INF             .              .          
+k12        -INF           -1.0000          .          
+k13        -INF             .              .          
+k14        -INF             .              .          
+k15        -INF             .              .          
+k16        -INF             .              .          
+k17        -INF             .              .          
+k18        -INF             .              .          
+k19        -INF             .              .          
+k20        -INF             .              .          
+
+---- EQU orientation1  
+
+                   LOWER          LEVEL          UPPER
+
+c1.r1.c1.r2        -INF            1.0000         1.0000      
+c1.r1.c2.r1        -INF            1.0000         1.0000      
+c1.r1.c2.r2        -INF            1.0000         1.0000      
+c1.r2.c1.r3        -INF            1.0000         1.0000      
+c1.r2.c2.r1        -INF            1.0000         1.0000      
+c1.r2.c2.r2        -INF            1.0000         1.0000      
+c1.r2.c2.r3        -INF            1.0000         1.0000      
+c1.r3.c1.r4        -INF             .             1.0000      
+c1.r3.c2.r2        -INF            1.0000         1.0000      
+c1.r3.c2.r3        -INF            1.0000         1.0000      
+c1.r3.c2.r4        -INF            1.0000         1.0000      
+c1.r4.c1.r5        -INF             .             1.0000      
+c1.r4.c2.r3        -INF            1.0000         1.0000      
+c1.r4.c2.r4        -INF            1.0000         1.0000      
+c1.r4.c2.r5        -INF            1.0000         1.0000      
+c1.r5.c2.r4        -INF            1.0000         1.0000      
+c1.r5.c2.r5        -INF            1.0000         1.0000      
+c2.r1.c2.r2        -INF            1.0000         1.0000      
+c2.r1.c3.r1        -INF            1.0000         1.0000      
+c2.r1.c3.r2        -INF            1.0000         1.0000      
+c2.r2.c2.r3        -INF            1.0000         1.0000      
+c2.r2.c3.r1        -INF            1.0000         1.0000      
+c2.r2.c3.r2        -INF            1.0000         1.0000      
+c2.r2.c3.r3        -INF            1.0000         1.0000      
+c2.r3.c2.r4        -INF            1.0000         1.0000      
+c2.r3.c3.r2        -INF            1.0000         1.0000      
+c2.r3.c3.r3        -INF            1.0000         1.0000      
+c2.r3.c3.r4        -INF            1.0000         1.0000      
+c2.r4.c2.r5        -INF            1.0000         1.0000      
+c2.r4.c3.r3        -INF            1.0000         1.0000      
+c2.r4.c3.r4        -INF            1.0000         1.0000      
+c2.r4.c3.r5        -INF            1.0000         1.0000      
+c2.r5.c3.r4        -INF            1.0000         1.0000      
+c2.r5.c3.r5        -INF            1.0000         1.0000      
+c3.r1.c3.r2        -INF            1.0000         1.0000      
+c3.r1.c4.r1        -INF            1.0000         1.0000      
+c3.r1.c4.r2        -INF            1.0000         1.0000      
+c3.r2.c3.r3        -INF            1.0000         1.0000      
+c3.r2.c4.r1        -INF            1.0000         1.0000      
+c3.r2.c4.r2        -INF            1.0000         1.0000      
+c3.r2.c4.r3        -INF            1.0000         1.0000      
+c3.r3.c3.r4        -INF             .             1.0000      
+c3.r3.c4.r2        -INF            1.0000         1.0000      
+c3.r3.c4.r3        -INF            1.0000         1.0000      
+c3.r3.c4.r4        -INF            1.0000         1.0000      
+c3.r4.c3.r5        -INF            1.0000         1.0000      
+c3.r4.c4.r3        -INF            1.0000         1.0000      
+c3.r4.c4.r4        -INF            1.0000         1.0000      
+c3.r4.c4.r5        -INF            1.0000         1.0000      
+c3.r5.c4.r4        -INF            1.0000         1.0000      
+c3.r5.c4.r5        -INF            1.0000         1.0000      
+c4.r1.c4.r2        -INF            1.0000         1.0000      
+c4.r2.c4.r3        -INF            1.0000         1.0000      
+c4.r3.c4.r4        -INF            1.0000         1.0000      
+c4.r4.c4.r5        -INF            1.0000         1.0000      
+
+---- EQU orientation2  
+
+                   LOWER          LEVEL          UPPER
+
+c1.r1.c1.r2        -INF             .              .          
+c1.r1.c2.r1        -INF             .              .          
+c1.r1.c2.r2        -INF             .              .          
+c1.r2.c1.r3        -INF           -1.0000          .          
+c1.r2.c2.r1        -INF             .              .          
+c1.r2.c2.r2        -INF             .              .          
+c1.r2.c2.r3        -INF             .              .          
+c1.r3.c1.r4        -INF             .              .          
+c1.r3.c2.r2        -INF             .              .          
+c1.r3.c2.r3        -INF             .              .          
+c1.r3.c2.r4        -INF             .              .          
+c1.r4.c1.r5        -INF             .              .          
+c1.r4.c2.r3        -INF             .              .          
+c1.r4.c2.r4        -INF             .              .          
+c1.r4.c2.r5        -INF             .              .          
+c1.r5.c2.r4        -INF             .              .          
+c1.r5.c2.r5        -INF             .              .          
+c2.r1.c2.r2        -INF             .              .          
+c2.r1.c3.r1        -INF             .              .          
+c2.r1.c3.r2        -INF             .              .          
+c2.r2.c2.r3        -INF             .              .          
+c2.r2.c3.r1        -INF             .              .          
+c2.r2.c3.r2        -INF             .              .          
+c2.r2.c3.r3        -INF           -1.0000          .          
+c2.r3.c2.r4        -INF             .              .          
+c2.r3.c3.r2        -INF             .              .          
+c2.r3.c3.r3        -INF           -1.0000          .          
+c2.r3.c3.r4        -INF           -1.0000          .          
+c2.r4.c2.r5        -INF             .              .          
+c2.r4.c3.r3        -INF           -1.0000          .          
+c2.r4.c3.r4        -INF           -1.0000          .          
+c2.r4.c3.r5        -INF             .              .          
+c2.r5.c3.r4        -INF           -1.0000          .          
+c2.r5.c3.r5        -INF             .              .          
+c3.r1.c3.r2        -INF             .              .          
+c3.r1.c4.r1        -INF             .              .          
+c3.r1.c4.r2        -INF             .              .          
+c3.r2.c3.r3        -INF           -1.0000          .          
+c3.r2.c4.r1        -INF             .              .          
+c3.r2.c4.r2        -INF             .              .          
+c3.r2.c4.r3        -INF             .              .          
+c3.r3.c3.r4        -INF             .              .          
+c3.r3.c4.r2        -INF             .              .          
+c3.r3.c4.r3        -INF             .              .          
+c3.r3.c4.r4        -INF             .              .          
+c3.r4.c3.r5        -INF             .              .          
+c3.r4.c4.r3        -INF             .              .          
+c3.r4.c4.r4        -INF             .              .          
+c3.r4.c4.r5        -INF             .              .          
+c3.r5.c4.r4        -INF             .              .          
+c3.r5.c4.r5        -INF             .              .          
+c4.r1.c4.r2        -INF             .              .          
+c4.r2.c4.r3        -INF             .              .          
+c4.r3.c4.r4        -INF             .              .          
+c4.r4.c4.r5        -INF             .              .          
+
+---- EQU orientation3  
+
+                   LOWER          LEVEL          UPPER
+
+c1.r1.c1.r2        -INF             .              .          
+c1.r1.c2.r1        -INF             .              .          
+c1.r1.c2.r2        -INF             .              .          
+c1.r2.c1.r3        -INF             .              .          
+c1.r2.c2.r1        -INF             .              .          
+c1.r2.c2.r2        -INF             .              .          
+c1.r2.c2.r3        -INF             .              .          
+c1.r3.c1.r4        -INF             .              .          
+c1.r3.c2.r2        -INF           -1.0000          .          
+c1.r3.c2.r3        -INF           -1.0000          .          
+c1.r3.c2.r4        -INF           -1.0000          .          
+c1.r4.c1.r5        -INF             .              .          
+c1.r4.c2.r3        -INF           -1.0000          .          
+c1.r4.c2.r4        -INF           -1.0000          .          
+c1.r4.c2.r5        -INF           -1.0000          .          
+c1.r5.c2.r4        -INF           -1.0000          .          
+c1.r5.c2.r5        -INF           -1.0000          .          
+c2.r1.c2.r2        -INF             .              .          
+c2.r1.c3.r1        -INF             .              .          
+c2.r1.c3.r2        -INF             .              .          
+c2.r2.c2.r3        -INF             .              .          
+c2.r2.c3.r1        -INF             .              .          
+c2.r2.c3.r2        -INF             .              .          
+c2.r2.c3.r3        -INF             .              .          
+c2.r3.c2.r4        -INF             .              .          
+c2.r3.c3.r2        -INF             .              .          
+c2.r3.c3.r3        -INF             .              .          
+c2.r3.c3.r4        -INF             .              .          
+c2.r4.c2.r5        -INF             .              .          
+c2.r4.c3.r3        -INF             .              .          
+c2.r4.c3.r4        -INF             .              .          
+c2.r4.c3.r5        -INF             .              .          
+c2.r5.c3.r4        -INF             .              .          
+c2.r5.c3.r5        -INF             .              .          
+c3.r1.c3.r2        -INF             .              .          
+c3.r1.c4.r1        -INF             .              .          
+c3.r1.c4.r2        -INF             .              .          
+c3.r2.c3.r3        -INF             .              .          
+c3.r2.c4.r1        -INF             .              .          
+c3.r2.c4.r2        -INF             .              .          
+c3.r2.c4.r3        -INF             .              .          
+c3.r3.c3.r4        -INF             .              .          
+c3.r3.c4.r2        -INF           -1.0000          .          
+c3.r3.c4.r3        -INF           -1.0000          .          
+c3.r3.c4.r4        -INF           -1.0000          .          
+c3.r4.c3.r5        -INF           -1.0000          .          
+c3.r4.c4.r3        -INF           -1.0000          .          
+c3.r4.c4.r4        -INF           -1.0000          .          
+c3.r4.c4.r5        -INF           -1.0000          .          
+c3.r5.c4.r4        -INF             .              .          
+c3.r5.c4.r5        -INF             .              .          
+c4.r1.c4.r2        -INF             .              .          
+c4.r2.c4.r3        -INF             .              .          
+c4.r3.c4.r4        -INF             .              .          
+c4.r4.c4.r5        -INF             .              .          
+
+---- EQU orderBounds  
+
+             LOWER          LEVEL          UPPER
+
+c1.r1        -INF             .              .          
+c1.r2        -INF          -19.0000          .          
+c1.r3        -INF             .              .          
+c1.r4        -INF             .              .          
+c1.r5        -INF             .              .          
+c2.r1        -INF          -16.0000          .          
+c2.r2        -INF          -18.0000          .          
+c2.r3        -INF          -17.0000          .          
+c2.r4        -INF           -3.0000          .          
+c2.r5        -INF           -1.0000          .          
+c3.r1        -INF          -17.0000          .          
+c3.r2        -INF          -19.0000          .          
+c3.r3        -INF             .              .          
+c3.r4        -INF             .              .          
+c3.r5        -INF           -2.0000          .          
+c4.r1        -INF             .              .          
+c4.r2        -INF          -16.0000          .          
+c4.r3        -INF             .              .          
+c4.r4        -INF           -1.0000          .          
+c4.r5        -INF          -19.0000          .          
+
+---- EQU acyclicity  
+
+                   LOWER          LEVEL          UPPER
+
+c1.r1.c1.r2        -INF           19.0000        19.0000      
+c1.r1.c2.r1        -INF           16.0000        19.0000      
+c1.r1.c2.r2        -INF           18.0000        19.0000      
+c1.r2.c1.r1        -INF            1.0000        19.0000      
+c1.r2.c1.r3        -INF             .            19.0000      
+c1.r2.c2.r1        -INF           17.0000        19.0000      
+c1.r2.c2.r2        -INF           19.0000        19.0000      
+c1.r2.c2.r3        -INF           18.0000        19.0000      
+c1.r3.c1.r2        -INF             .            19.0000      
+c1.r3.c1.r4        -INF             .            19.0000      
+c1.r3.c2.r2        -INF           -1.0000        19.0000      
+c1.r3.c2.r3        -INF           -2.0000        19.0000      
+c1.r3.c2.r4        -INF          -16.0000        19.0000      
+c1.r4.c1.r3        -INF             .            19.0000      
+c1.r4.c1.r5        -INF             .            19.0000      
+c1.r4.c2.r3        -INF           -2.0000        19.0000      
+c1.r4.c2.r4        -INF          -16.0000        19.0000      
+c1.r4.c2.r5        -INF          -18.0000        19.0000      
+c1.r5.c1.r4        -INF             .            19.0000      
+c1.r5.c2.r4        -INF          -16.0000        19.0000      
+c1.r5.c2.r5        -INF          -18.0000        19.0000      
+c2.r1.c1.r1        -INF            4.0000        19.0000      
+c2.r1.c1.r2        -INF            3.0000        19.0000      
+c2.r1.c2.r2        -INF            2.0000        19.0000      
+c2.r1.c3.r1        -INF            1.0000        19.0000      
+c2.r1.c3.r2        -INF            3.0000        19.0000      
+c2.r2.c1.r1        -INF            2.0000        19.0000      
+c2.r2.c1.r2        -INF            1.0000        19.0000      
+c2.r2.c1.r3        -INF            1.0000        19.0000      
+c2.r2.c2.r1        -INF           18.0000        19.0000      
+c2.r2.c2.r3        -INF           19.0000        19.0000      
+c2.r2.c3.r1        -INF           19.0000        19.0000      
+c2.r2.c3.r2        -INF            1.0000        19.0000      
+c2.r2.c3.r3        -INF            1.0000        19.0000      
+c2.r3.c1.r2        -INF            2.0000        19.0000      
+c2.r3.c1.r3        -INF            2.0000        19.0000      
+c2.r3.c1.r4        -INF            2.0000        19.0000      
+c2.r3.c2.r2        -INF            1.0000        19.0000      
+c2.r3.c2.r4        -INF            6.0000        19.0000      
+c2.r3.c3.r2        -INF            2.0000        19.0000      
+c2.r3.c3.r3        -INF            2.0000        19.0000      
+c2.r3.c3.r4        -INF            2.0000        19.0000      
+c2.r4.c1.r3        -INF           16.0000        19.0000      
+c2.r4.c1.r4        -INF           16.0000        19.0000      
+c2.r4.c1.r5        -INF           16.0000        19.0000      
+c2.r4.c2.r3        -INF           14.0000        19.0000      
+c2.r4.c2.r5        -INF           18.0000        19.0000      
+c2.r4.c3.r3        -INF           16.0000        19.0000      
+c2.r4.c3.r4        -INF           16.0000        19.0000      
+c2.r4.c3.r5        -INF           19.0000        19.0000      
+c2.r5.c1.r4        -INF           18.0000        19.0000      
+c2.r5.c1.r5        -INF           18.0000        19.0000      
+c2.r5.c2.r4        -INF            2.0000        19.0000      
+c2.r5.c3.r4        -INF           18.0000        19.0000      
+c2.r5.c3.r5        -INF            1.0000        19.0000      
+c3.r1.c2.r1        -INF           19.0000        19.0000      
+c3.r1.c2.r2        -INF            1.0000        19.0000      
+c3.r1.c3.r2        -INF            2.0000        19.0000      
+c3.r1.c4.r1        -INF            3.0000        19.0000      
+c3.r1.c4.r2        -INF           19.0000        19.0000      
+c3.r2.c2.r1        -INF           17.0000        19.0000      
+c3.r2.c2.r2        -INF           19.0000        19.0000      
+c3.r2.c2.r3        -INF           18.0000        19.0000      
+c3.r2.c3.r1        -INF           18.0000        19.0000      
+c3.r2.c3.r3        -INF             .            19.0000      
+c3.r2.c4.r1        -INF            1.0000        19.0000      
+c3.r2.c4.r2        -INF           17.0000        19.0000      
+c3.r2.c4.r3        -INF            1.0000        19.0000      
+c3.r3.c2.r2        -INF           -1.0000        19.0000      
+c3.r3.c2.r3        -INF           -2.0000        19.0000      
+c3.r3.c2.r4        -INF          -16.0000        19.0000      
+c3.r3.c3.r2        -INF             .            19.0000      
+c3.r3.c3.r4        -INF             .            19.0000      
+c3.r3.c4.r2        -INF           -3.0000        19.0000      
+c3.r3.c4.r3        -INF          -19.0000        19.0000      
+c3.r3.c4.r4        -INF          -18.0000        19.0000      
+c3.r4.c2.r3        -INF           -2.0000        19.0000      
+c3.r4.c2.r4        -INF          -16.0000        19.0000      
+c3.r4.c2.r5        -INF          -18.0000        19.0000      
+c3.r4.c3.r3        -INF             .            19.0000      
+c3.r4.c3.r5        -INF          -17.0000        19.0000      
+c3.r4.c4.r3        -INF          -19.0000        19.0000      
+c3.r4.c4.r4        -INF          -18.0000        19.0000      
+c3.r4.c4.r5        -INF             .            19.0000      
+c3.r5.c2.r4        -INF            1.0000        19.0000      
+c3.r5.c2.r5        -INF           19.0000        19.0000      
+c3.r5.c3.r4        -INF           17.0000        19.0000      
+c3.r5.c4.r4        -INF           19.0000        19.0000      
+c3.r5.c4.r5        -INF           17.0000        19.0000      
+c4.r1.c3.r1        -INF           17.0000        19.0000      
+c4.r1.c3.r2        -INF           19.0000        19.0000      
+c4.r1.c4.r2        -INF           16.0000        19.0000      
+c4.r2.c3.r1        -INF            1.0000        19.0000      
+c4.r2.c3.r2        -INF            3.0000        19.0000      
+c4.r2.c3.r3        -INF            3.0000        19.0000      
+c4.r2.c4.r1        -INF            4.0000        19.0000      
+c4.r2.c4.r3        -INF            4.0000        19.0000      
+c4.r3.c3.r2        -INF           19.0000        19.0000      
+c4.r3.c3.r3        -INF           19.0000        19.0000      
+c4.r3.c3.r4        -INF           19.0000        19.0000      
+c4.r3.c4.r2        -INF           16.0000        19.0000      
+c4.r3.c4.r4        -INF            1.0000        19.0000      
+c4.r4.c3.r3        -INF           18.0000        19.0000      
+c4.r4.c3.r4        -INF           18.0000        19.0000      
+c4.r4.c3.r5        -INF            1.0000        19.0000      
+c4.r4.c4.r3        -INF           19.0000        19.0000      
+c4.r4.c4.r5        -INF           18.0000        19.0000      
+c4.r5.c3.r4        -INF             .            19.0000      
+c4.r5.c3.r5        -INF            3.0000        19.0000      
+c4.r5.c4.r4        -INF            2.0000        19.0000      
+
+---- EQU valueOrder  
+
+                   LOWER          LEVEL          UPPER
+
+c1.r1.c1.r2        -INF            9.0000        20.0000      
+c1.r1.c2.r1        -INF            3.0000        20.0000      
+c1.r1.c2.r2        -INF            8.0000        20.0000      
+c1.r2.c1.r1        -INF           11.0000        20.0000      
+c1.r2.c1.r3        -INF            1.0000        20.0000      
+c1.r2.c2.r1        -INF           14.0000        20.0000      
+c1.r2.c2.r2        -INF           19.0000        20.0000      
+c1.r2.c2.r3        -INF           17.0000        20.0000      
+c1.r3.c1.r2        -INF           -1.0000        20.0000      
+c1.r3.c1.r4        -INF             .            20.0000      
+c1.r3.c2.r2        -INF           -2.0000        20.0000      
+c1.r3.c2.r3        -INF           -4.0000        20.0000      
+c1.r3.c2.r4        -INF           -4.0000        20.0000      
+c1.r4.c1.r3        -INF             .            20.0000      
+c1.r4.c1.r5        -INF             .            20.0000      
+c1.r4.c2.r3        -INF           -4.0000        20.0000      
+c1.r4.c2.r4        -INF           -4.0000        20.0000      
+c1.r4.c2.r5        -INF           -9.0000        20.0000      
+c1.r5.c1.r4        -INF             .            20.0000      
+c1.r5.c2.r4        -INF           -4.0000        20.0000      
+c1.r5.c2.r5        -INF           -9.0000        20.0000      
+c2.r1.c1.r1        -INF           17.0000        20.0000      
+c2.r1.c1.r2        -INF            6.0000        20.0000      
+c2.r1.c2.r2        -INF            5.0000        20.0000      
+c2.r1.c3.r1        -INF            4.0000        20.0000      
+c2.r1.c3.r2        -INF            6.0000        20.0000      
+c2.r2.c1.r1        -INF           12.0000        20.0000      
+c2.r2.c1.r2        -INF            1.0000        20.0000      
+c2.r2.c1.r3        -INF            2.0000        20.0000      
+c2.r2.c2.r1        -INF           15.0000        20.0000      
+c2.r2.c2.r3        -INF           18.0000        20.0000      
+c2.r2.c3.r1        -INF           19.0000        20.0000      
+c2.r2.c3.r2        -INF            1.0000        20.0000      
+c2.r2.c3.r3        -INF            2.0000        20.0000      
+c2.r3.c1.r2        -INF            3.0000        20.0000      
+c2.r3.c1.r3        -INF            4.0000        20.0000      
+c2.r3.c1.r4        -INF            4.0000        20.0000      
+c2.r3.c2.r2        -INF            2.0000        20.0000      
+c2.r3.c2.r4        -INF           20.0000        20.0000      
+c2.r3.c3.r2        -INF            3.0000        20.0000      
+c2.r3.c3.r3        -INF            4.0000        20.0000      
+c2.r3.c3.r4        -INF            4.0000        20.0000      
+c2.r4.c1.r3        -INF            4.0000        20.0000      
+c2.r4.c1.r4        -INF            4.0000        20.0000      
+c2.r4.c1.r5        -INF            4.0000        20.0000      
+c2.r4.c2.r3        -INF             .            20.0000      
+c2.r4.c2.r5        -INF           15.0000        20.0000      
+c2.r4.c3.r3        -INF            4.0000        20.0000      
+c2.r4.c3.r4        -INF            4.0000        20.0000      
+c2.r4.c3.r5        -INF           19.0000        20.0000      
+c2.r5.c1.r4        -INF            9.0000        20.0000      
+c2.r5.c1.r5        -INF            9.0000        20.0000      
+c2.r5.c2.r4        -INF            5.0000        20.0000      
+c2.r5.c3.r4        -INF            9.0000        20.0000      
+c2.r5.c3.r5        -INF            4.0000        20.0000      
+c3.r1.c2.r1        -INF           16.0000        20.0000      
+c3.r1.c2.r2        -INF            1.0000        20.0000      
+c3.r1.c3.r2        -INF            2.0000        20.0000      
+c3.r1.c4.r1        -INF           15.0000        20.0000      
+c3.r1.c4.r2        -INF           19.0000        20.0000      
+c3.r2.c2.r1        -INF           14.0000        20.0000      
+c3.r2.c2.r2        -INF           19.0000        20.0000      
+c3.r2.c2.r3        -INF           17.0000        20.0000      
+c3.r2.c3.r1        -INF           18.0000        20.0000      
+c3.r2.c3.r3        -INF            1.0000        20.0000      
+c3.r2.c4.r1        -INF           13.0000        20.0000      
+c3.r2.c4.r2        -INF           17.0000        20.0000      
+c3.r2.c4.r3        -INF           10.0000        20.0000      
+c3.r3.c2.r2        -INF           -2.0000        20.0000      
+c3.r3.c2.r3        -INF           -4.0000        20.0000      
+c3.r3.c2.r4        -INF           -4.0000        20.0000      
+c3.r3.c3.r2        -INF           -1.0000        20.0000      
+c3.r3.c3.r4        -INF             .            20.0000      
+c3.r3.c4.r2        -INF           -4.0000        20.0000      
+c3.r3.c4.r3        -INF          -11.0000        20.0000      
+c3.r3.c4.r4        -INF           -6.0000        20.0000      
+c3.r4.c2.r3        -INF           -4.0000        20.0000      
+c3.r4.c2.r4        -INF           -4.0000        20.0000      
+c3.r4.c2.r5        -INF           -9.0000        20.0000      
+c3.r4.c3.r3        -INF             .            20.0000      
+c3.r4.c3.r5        -INF           -5.0000        20.0000      
+c3.r4.c4.r3        -INF          -11.0000        20.0000      
+c3.r4.c4.r4        -INF           -6.0000        20.0000      
+c3.r4.c4.r5        -INF           -1.0000        20.0000      
+c3.r5.c2.r4        -INF            1.0000        20.0000      
+c3.r5.c2.r5        -INF           16.0000        20.0000      
+c3.r5.c3.r4        -INF            5.0000        20.0000      
+c3.r5.c4.r4        -INF           19.0000        20.0000      
+c3.r5.c4.r5        -INF            4.0000        20.0000      
+c4.r1.c3.r1        -INF            5.0000        20.0000      
+c4.r1.c3.r2        -INF            7.0000        20.0000      
+c4.r1.c4.r2        -INF            4.0000        20.0000      
+c4.r2.c3.r1        -INF            1.0000        20.0000      
+c4.r2.c3.r2        -INF            3.0000        20.0000      
+c4.r2.c3.r3        -INF            4.0000        20.0000      
+c4.r2.c4.r1        -INF           16.0000        20.0000      
+c4.r2.c4.r3        -INF           13.0000        20.0000      
+c4.r3.c3.r2        -INF           10.0000        20.0000      
+c4.r3.c3.r3        -INF           11.0000        20.0000      
+c4.r3.c3.r4        -INF           11.0000        20.0000      
+c4.r3.c4.r2        -INF            7.0000        20.0000      
+c4.r3.c4.r4        -INF            5.0000        20.0000      
+c4.r4.c3.r3        -INF            6.0000        20.0000      
+c4.r4.c3.r4        -INF            6.0000        20.0000      
+c4.r4.c3.r5        -INF            1.0000        20.0000      
+c4.r4.c4.r3        -INF           15.0000        20.0000      
+c4.r4.c4.r5        -INF            5.0000        20.0000      
+c4.r5.c3.r4        -INF            1.0000        20.0000      
+c4.r5.c3.r5        -INF           16.0000        20.0000      
+c4.r5.c4.r4        -INF           15.0000        20.0000      
+
+---- EQU contribution1  
+
+                   LOWER          LEVEL          UPPER
+
+c1.r1.c1.r2        -INF             .              .          
+c1.r1.c2.r1        -INF             .              .          
+c1.r1.c2.r2        -INF             .              .          
+c1.r2.c1.r1        -INF          -19.0000          .          
+c1.r2.c1.r3        -INF             .              .          
+c1.r2.c2.r1        -INF          -19.0000          .          
+c1.r2.c2.r2        -INF          -19.0000          .          
+c1.r2.c2.r3        -INF          -19.0000          .          
+c1.r3.c1.r2        -INF             .              .          
+c1.r3.c1.r4        -INF             .              .          
+c1.r3.c2.r2        -INF             .              .          
+c1.r3.c2.r3        -INF             .              .          
+c1.r3.c2.r4        -INF             .              .          
+c1.r4.c1.r3        -INF             .              .          
+c1.r4.c1.r5        -INF             .              .          
+c1.r4.c2.r3        -INF             .              .          
+c1.r4.c2.r4        -INF             .              .          
+c1.r4.c2.r5        -INF             .              .          
+c1.r5.c1.r4        -INF             .              .          
+c1.r5.c2.r4        -INF             .              .          
+c1.r5.c2.r5        -INF             .              .          
+c2.r1.c1.r1        -INF          -13.0000          .          
+c2.r1.c1.r2        -INF             .              .          
+c2.r1.c2.r2        -INF             .              .          
+c2.r1.c3.r1        -INF             .              .          
+c2.r1.c3.r2        -INF             .              .          
+c2.r2.c1.r1        -INF          -18.0000          .          
+c2.r2.c1.r2        -INF             .              .          
+c2.r2.c1.r3        -INF             .              .          
+c2.r2.c2.r1        -INF          -18.0000          .          
+c2.r2.c2.r3        -INF          -18.0000          .          
+c2.r2.c3.r1        -INF          -18.0000          .          
+c2.r2.c3.r2        -INF             .              .          
+c2.r2.c3.r3        -INF             .              .          
+c2.r3.c1.r2        -INF             .              .          
+c2.r3.c1.r3        -INF             .              .          
+c2.r3.c1.r4        -INF             .              .          
+c2.r3.c2.r2        -INF             .              .          
+c2.r3.c2.r4        -INF          -16.0000          .          
+c2.r3.c3.r2        -INF             .              .          
+c2.r3.c3.r3        -INF             .              .          
+c2.r3.c3.r4        -INF             .              .          
+c2.r4.c1.r3        -INF             .              .          
+c2.r4.c1.r4        -INF             .              .          
+c2.r4.c1.r5        -INF             .              .          
+c2.r4.c2.r3        -INF             .              .          
+c2.r4.c2.r5        -INF          -16.0000          .          
+c2.r4.c3.r3        -INF             .              .          
+c2.r4.c3.r4        -INF             .              .          
+c2.r4.c3.r5        -INF          -16.0000          .          
+c2.r5.c1.r4        -INF             .              .          
+c2.r5.c1.r5        -INF             .              .          
+c2.r5.c2.r4        -INF             .              .          
+c2.r5.c3.r4        -INF             .              .          
+c2.r5.c3.r5        -INF             .              .          
+c3.r1.c2.r1        -INF          -17.0000          .          
+c3.r1.c2.r2        -INF             .              .          
+c3.r1.c3.r2        -INF             .              .          
+c3.r1.c4.r1        -INF          -17.0000          .          
+c3.r1.c4.r2        -INF          -17.0000          .          
+c3.r2.c2.r1        -INF          -19.0000          .          
+c3.r2.c2.r2        -INF          -19.0000          .          
+c3.r2.c2.r3        -INF          -19.0000          .          
+c3.r2.c3.r1        -INF          -19.0000          .          
+c3.r2.c3.r3        -INF             .              .          
+c3.r2.c4.r1        -INF          -19.0000          .          
+c3.r2.c4.r2        -INF          -19.0000          .          
+c3.r2.c4.r3        -INF          -19.0000          .          
+c3.r3.c2.r2        -INF             .              .          
+c3.r3.c2.r3        -INF             .              .          
+c3.r3.c2.r4        -INF             .              .          
+c3.r3.c3.r2        -INF             .              .          
+c3.r3.c3.r4        -INF             .              .          
+c3.r3.c4.r2        -INF             .              .          
+c3.r3.c4.r3        -INF             .              .          
+c3.r3.c4.r4        -INF             .              .          
+c3.r4.c2.r3        -INF             .              .          
+c3.r4.c2.r4        -INF             .              .          
+c3.r4.c2.r5        -INF             .              .          
+c3.r4.c3.r3        -INF             .              .          
+c3.r4.c3.r5        -INF             .              .          
+c3.r4.c4.r3        -INF             .              .          
+c3.r4.c4.r4        -INF             .              .          
+c3.r4.c4.r5        -INF             .              .          
+c3.r5.c2.r4        -INF             .              .          
+c3.r5.c2.r5        -INF          -15.0000          .          
+c3.r5.c3.r4        -INF             .              .          
+c3.r5.c4.r4        -INF          -15.0000          .          
+c3.r5.c4.r5        -INF             .              .          
+c4.r1.c3.r1        -INF             .              .          
+c4.r1.c3.r2        -INF             .              .          
+c4.r1.c4.r2        -INF             .              .          
+c4.r2.c3.r1        -INF             .              .          
+c4.r2.c3.r2        -INF             .              .          
+c4.r2.c3.r3        -INF             .              .          
+c4.r2.c4.r1        -INF          -16.0000          .          
+c4.r2.c4.r3        -INF          -16.0000          .          
+c4.r3.c3.r2        -INF             .              .          
+c4.r3.c3.r3        -INF             .              .          
+c4.r3.c3.r4        -INF             .              .          
+c4.r3.c4.r2        -INF             .              .          
+c4.r3.c4.r4        -INF             .              .          
+c4.r4.c3.r3        -INF             .              .          
+c4.r4.c3.r4        -INF             .              .          
+c4.r4.c3.r5        -INF             .              .          
+c4.r4.c4.r3        -INF          -14.0000          .          
+c4.r4.c4.r5        -INF             .              .          
+c4.r5.c3.r4        -INF             .              .          
+c4.r5.c3.r5        -INF          -19.0000          .          
+c4.r5.c4.r4        -INF          -19.0000          .          
+
+---- EQU contribution2  
+
+                   LOWER          LEVEL          UPPER
+
+c1.r1.c1.r2        -INF          -10.0000          .          
+c1.r1.c2.r1        -INF          -10.0000          .          
+c1.r1.c2.r2        -INF          -10.0000          .          
+c1.r2.c1.r1        -INF             .              .          
+c1.r2.c1.r3        -INF           -1.0000          .          
+c1.r2.c2.r1        -INF             .              .          
+c1.r2.c2.r2        -INF             .              .          
+c1.r2.c2.r3        -INF             .              .          
+c1.r3.c1.r2        -INF             .              .          
+c1.r3.c1.r4        -INF             .              .          
+c1.r3.c2.r2        -INF             .              .          
+c1.r3.c2.r3        -INF             .              .          
+c1.r3.c2.r4        -INF             .              .          
+c1.r4.c1.r3        -INF             .              .          
+c1.r4.c1.r5        -INF             .              .          
+c1.r4.c2.r3        -INF             .              .          
+c1.r4.c2.r4        -INF             .              .          
+c1.r4.c2.r5        -INF             .              .          
+c1.r5.c1.r4        -INF             .              .          
+c1.r5.c2.r4        -INF             .              .          
+c1.r5.c2.r5        -INF             .              .          
+c2.r1.c1.r1        -INF             .              .          
+c2.r1.c1.r2        -INF           -7.0000          .          
+c2.r1.c2.r2        -INF           -7.0000          .          
+c2.r1.c3.r1        -INF           -7.0000          .          
+c2.r1.c3.r2        -INF           -7.0000          .          
+c2.r2.c1.r1        -INF             .              .          
+c2.r2.c1.r2        -INF           -2.0000          .          
+c2.r2.c1.r3        -INF           -2.0000          .          
+c2.r2.c2.r1        -INF             .              .          
+c2.r2.c2.r3        -INF             .              .          
+c2.r2.c3.r1        -INF             .              .          
+c2.r2.c3.r2        -INF           -2.0000          .          
+c2.r2.c3.r3        -INF           -2.0000          .          
+c2.r3.c1.r2        -INF           -4.0000          .          
+c2.r3.c1.r3        -INF           -4.0000          .          
+c2.r3.c1.r4        -INF           -4.0000          .          
+c2.r3.c2.r2        -INF           -4.0000          .          
+c2.r3.c2.r4        -INF             .              .          
+c2.r3.c3.r2        -INF           -4.0000          .          
+c2.r3.c3.r3        -INF           -4.0000          .          
+c2.r3.c3.r4        -INF           -4.0000          .          
+c2.r4.c1.r3        -INF           -4.0000          .          
+c2.r4.c1.r4        -INF           -4.0000          .          
+c2.r4.c1.r5        -INF           -4.0000          .          
+c2.r4.c2.r3        -INF           -4.0000          .          
+c2.r4.c2.r5        -INF             .              .          
+c2.r4.c3.r3        -INF           -4.0000          .          
+c2.r4.c3.r4        -INF           -4.0000          .          
+c2.r4.c3.r5        -INF             .              .          
+c2.r5.c1.r4        -INF           -9.0000          .          
+c2.r5.c1.r5        -INF           -9.0000          .          
+c2.r5.c2.r4        -INF           -9.0000          .          
+c2.r5.c3.r4        -INF           -9.0000          .          
+c2.r5.c3.r5        -INF           -9.0000          .          
+c3.r1.c2.r1        -INF             .              .          
+c3.r1.c2.r2        -INF           -3.0000          .          
+c3.r1.c3.r2        -INF           -3.0000          .          
+c3.r1.c4.r1        -INF             .              .          
+c3.r1.c4.r2        -INF             .              .          
+c3.r2.c2.r1        -INF             .              .          
+c3.r2.c2.r2        -INF             .              .          
+c3.r2.c2.r3        -INF             .              .          
+c3.r2.c3.r1        -INF             .              .          
+c3.r2.c3.r3        -INF           -1.0000          .          
+c3.r2.c4.r1        -INF             .              .          
+c3.r2.c4.r2        -INF             .              .          
+c3.r2.c4.r3        -INF             .              .          
+c3.r3.c2.r2        -INF             .              .          
+c3.r3.c2.r3        -INF             .              .          
+c3.r3.c2.r4        -INF             .              .          
+c3.r3.c3.r2        -INF             .              .          
+c3.r3.c3.r4        -INF             .              .          
+c3.r3.c4.r2        -INF             .              .          
+c3.r3.c4.r3        -INF             .              .          
+c3.r3.c4.r4        -INF             .              .          
+c3.r4.c2.r3        -INF             .              .          
+c3.r4.c2.r4        -INF             .              .          
+c3.r4.c2.r5        -INF             .              .          
+c3.r4.c3.r3        -INF             .              .          
+c3.r4.c3.r5        -INF             .              .          
+c3.r4.c4.r3        -INF             .              .          
+c3.r4.c4.r4        -INF             .              .          
+c3.r4.c4.r5        -INF             .              .          
+c3.r5.c2.r4        -INF           -5.0000          .          
+c3.r5.c2.r5        -INF             .              .          
+c3.r5.c3.r4        -INF           -5.0000          .          
+c3.r5.c4.r4        -INF             .              .          
+c3.r5.c4.r5        -INF           -5.0000          .          
+c4.r1.c3.r1        -INF           -8.0000          .          
+c4.r1.c3.r2        -INF           -8.0000          .          
+c4.r1.c4.r2        -INF           -8.0000          .          
+c4.r2.c3.r1        -INF           -4.0000          .          
+c4.r2.c3.r2        -INF           -4.0000          .          
+c4.r2.c3.r3        -INF           -4.0000          .          
+c4.r2.c4.r1        -INF             .              .          
+c4.r2.c4.r3        -INF             .              .          
+c4.r3.c3.r2        -INF          -11.0000          .          
+c4.r3.c3.r3        -INF          -11.0000          .          
+c4.r3.c3.r4        -INF          -11.0000          .          
+c4.r3.c4.r2        -INF          -11.0000          .          
+c4.r3.c4.r4        -INF          -11.0000          .          
+c4.r4.c3.r3        -INF           -6.0000          .          
+c4.r4.c3.r4        -INF           -6.0000          .          
+c4.r4.c3.r5        -INF           -6.0000          .          
+c4.r4.c4.r3        -INF             .              .          
+c4.r4.c4.r5        -INF           -6.0000          .          
+c4.r5.c3.r4        -INF           -1.0000          .          
+c4.r5.c3.r5        -INF             .              .          
+c4.r5.c4.r4        -INF             .              .          
+
+---- EQU contribution3  
+
+                   LOWER          LEVEL          UPPER
+
+c1.r1.c1.r2       -20.0000       -10.0000        +INF         
+c1.r1.c2.r1       -20.0000       -10.0000        +INF         
+c1.r1.c2.r2       -20.0000       -10.0000        +INF         
+c1.r2.c1.r1       -20.0000       -20.0000        +INF         
+c1.r2.c1.r3       -20.0000        -1.0000        +INF         
+c1.r2.c2.r1       -20.0000       -20.0000        +INF         
+c1.r2.c2.r2       -20.0000       -20.0000        +INF         
+c1.r2.c2.r3       -20.0000       -20.0000        +INF         
+c1.r3.c1.r2       -20.0000          .            +INF         
+c1.r3.c1.r4       -20.0000          .            +INF         
+c1.r3.c2.r2       -20.0000          .            +INF         
+c1.r3.c2.r3       -20.0000          .            +INF         
+c1.r3.c2.r4       -20.0000          .            +INF         
+c1.r4.c1.r3       -20.0000          .            +INF         
+c1.r4.c1.r5       -20.0000          .            +INF         
+c1.r4.c2.r3       -20.0000          .            +INF         
+c1.r4.c2.r4       -20.0000          .            +INF         
+c1.r4.c2.r5       -20.0000          .            +INF         
+c1.r5.c1.r4       -20.0000          .            +INF         
+c1.r5.c2.r4       -20.0000          .            +INF         
+c1.r5.c2.r5       -20.0000          .            +INF         
+c2.r1.c1.r1       -20.0000       -20.0000        +INF         
+c2.r1.c1.r2       -20.0000        -7.0000        +INF         
+c2.r1.c2.r2       -20.0000        -7.0000        +INF         
+c2.r1.c3.r1       -20.0000        -7.0000        +INF         
+c2.r1.c3.r2       -20.0000        -7.0000        +INF         
+c2.r2.c1.r1       -20.0000       -20.0000        +INF         
+c2.r2.c1.r2       -20.0000        -2.0000        +INF         
+c2.r2.c1.r3       -20.0000        -2.0000        +INF         
+c2.r2.c2.r1       -20.0000       -20.0000        +INF         
+c2.r2.c2.r3       -20.0000       -20.0000        +INF         
+c2.r2.c3.r1       -20.0000       -20.0000        +INF         
+c2.r2.c3.r2       -20.0000        -2.0000        +INF         
+c2.r2.c3.r3       -20.0000        -2.0000        +INF         
+c2.r3.c1.r2       -20.0000        -4.0000        +INF         
+c2.r3.c1.r3       -20.0000        -4.0000        +INF         
+c2.r3.c1.r4       -20.0000        -4.0000        +INF         
+c2.r3.c2.r2       -20.0000        -4.0000        +INF         
+c2.r3.c2.r4       -20.0000       -20.0000        +INF         
+c2.r3.c3.r2       -20.0000        -4.0000        +INF         
+c2.r3.c3.r3       -20.0000        -4.0000        +INF         
+c2.r3.c3.r4       -20.0000        -4.0000        +INF         
+c2.r4.c1.r3       -20.0000        -4.0000        +INF         
+c2.r4.c1.r4       -20.0000        -4.0000        +INF         
+c2.r4.c1.r5       -20.0000        -4.0000        +INF         
+c2.r4.c2.r3       -20.0000        -4.0000        +INF         
+c2.r4.c2.r5       -20.0000       -20.0000        +INF         
+c2.r4.c3.r3       -20.0000        -4.0000        +INF         
+c2.r4.c3.r4       -20.0000        -4.0000        +INF         
+c2.r4.c3.r5       -20.0000       -20.0000        +INF         
+c2.r5.c1.r4       -20.0000        -9.0000        +INF         
+c2.r5.c1.r5       -20.0000        -9.0000        +INF         
+c2.r5.c2.r4       -20.0000        -9.0000        +INF         
+c2.r5.c3.r4       -20.0000        -9.0000        +INF         
+c2.r5.c3.r5       -20.0000        -9.0000        +INF         
+c3.r1.c2.r1       -20.0000       -20.0000        +INF         
+c3.r1.c2.r2       -20.0000        -3.0000        +INF         
+c3.r1.c3.r2       -20.0000        -3.0000        +INF         
+c3.r1.c4.r1       -20.0000       -20.0000        +INF         
+c3.r1.c4.r2       -20.0000       -20.0000        +INF         
+c3.r2.c2.r1       -20.0000       -20.0000        +INF         
+c3.r2.c2.r2       -20.0000       -20.0000        +INF         
+c3.r2.c2.r3       -20.0000       -20.0000        +INF         
+c3.r2.c3.r1       -20.0000       -20.0000        +INF         
+c3.r2.c3.r3       -20.0000        -1.0000        +INF         
+c3.r2.c4.r1       -20.0000       -20.0000        +INF         
+c3.r2.c4.r2       -20.0000       -20.0000        +INF         
+c3.r2.c4.r3       -20.0000       -20.0000        +INF         
+c3.r3.c2.r2       -20.0000          .            +INF         
+c3.r3.c2.r3       -20.0000          .            +INF         
+c3.r3.c2.r4       -20.0000          .            +INF         
+c3.r3.c3.r2       -20.0000          .            +INF         
+c3.r3.c3.r4       -20.0000          .            +INF         
+c3.r3.c4.r2       -20.0000          .            +INF         
+c3.r3.c4.r3       -20.0000          .            +INF         
+c3.r3.c4.r4       -20.0000          .            +INF         
+c3.r4.c2.r3       -20.0000          .            +INF         
+c3.r4.c2.r4       -20.0000          .            +INF         
+c3.r4.c2.r5       -20.0000          .            +INF         
+c3.r4.c3.r3       -20.0000          .            +INF         
+c3.r4.c3.r5       -20.0000          .            +INF         
+c3.r4.c4.r3       -20.0000          .            +INF         
+c3.r4.c4.r4       -20.0000          .            +INF         
+c3.r4.c4.r5       -20.0000          .            +INF         
+c3.r5.c2.r4       -20.0000        -5.0000        +INF         
+c3.r5.c2.r5       -20.0000       -20.0000        +INF         
+c3.r5.c3.r4       -20.0000        -5.0000        +INF         
+c3.r5.c4.r4       -20.0000       -20.0000        +INF         
+c3.r5.c4.r5       -20.0000        -5.0000        +INF         
+c4.r1.c3.r1       -20.0000        -8.0000        +INF         
+c4.r1.c3.r2       -20.0000        -8.0000        +INF         
+c4.r1.c4.r2       -20.0000        -8.0000        +INF         
+c4.r2.c3.r1       -20.0000        -4.0000        +INF         
+c4.r2.c3.r2       -20.0000        -4.0000        +INF         
+c4.r2.c3.r3       -20.0000        -4.0000        +INF         
+c4.r2.c4.r1       -20.0000       -20.0000        +INF         
+c4.r2.c4.r3       -20.0000       -20.0000        +INF         
+c4.r3.c3.r2       -20.0000       -11.0000        +INF         
+c4.r3.c3.r3       -20.0000       -11.0000        +INF         
+c4.r3.c3.r4       -20.0000       -11.0000        +INF         
+c4.r3.c4.r2       -20.0000       -11.0000        +INF         
+c4.r3.c4.r4       -20.0000       -11.0000        +INF         
+c4.r4.c3.r3       -20.0000        -6.0000        +INF         
+c4.r4.c3.r4       -20.0000        -6.0000        +INF         
+c4.r4.c3.r5       -20.0000        -6.0000        +INF         
+c4.r4.c4.r3       -20.0000       -20.0000        +INF         
+c4.r4.c4.r5       -20.0000        -6.0000        +INF         
+c4.r5.c3.r4       -20.0000        -1.0000        +INF         
+c4.r5.c3.r5       -20.0000       -20.0000        +INF         
+c4.r5.c4.r4       -20.0000       -20.0000        +INF         
+
+---- EQU neighborhoodLB  
+
+                 LOWER          LEVEL          UPPER
+
+c1.r1.k2        -58.0000        10.0000        +INF         
+c1.r1.k3        -57.0000        10.0000        +INF         
+c1.r1.k4        -56.0000        10.0000        +INF         
+c1.r1.k5        -55.0000        10.0000        +INF         
+c1.r1.k6        -54.0000        10.0000        +INF         
+c1.r1.k7        -53.0000        10.0000        +INF         
+c1.r1.k8        -52.0000        10.0000        +INF         
+c1.r1.k9        -51.0000        10.0000        +INF         
+c1.r1.k10       -50.0000       -50.0000        +INF         
+c1.r1.k11       -49.0000        10.0000        +INF         
+c1.r1.k12       -48.0000        10.0000        +INF         
+c1.r1.k13       -47.0000        10.0000        +INF         
+c1.r1.k14       -46.0000        10.0000        +INF         
+c1.r1.k15       -45.0000        10.0000        +INF         
+c1.r1.k16       -44.0000        10.0000        +INF         
+c1.r1.k17       -43.0000        10.0000        +INF         
+c1.r1.k18       -42.0000        10.0000        +INF         
+c1.r1.k19       -41.0000        10.0000        +INF         
+c1.r1.k20       -40.0000        10.0000        +INF         
+c1.r2.k2        -98.0000          .            +INF         
+c1.r2.k3        -97.0000          .            +INF         
+c1.r2.k4        -96.0000          .            +INF         
+c1.r2.k5        -95.0000          .            +INF         
+c1.r2.k6        -94.0000          .            +INF         
+c1.r2.k7        -93.0000          .            +INF         
+c1.r2.k8        -92.0000          .            +INF         
+c1.r2.k9        -91.0000          .            +INF         
+c1.r2.k10       -90.0000          .            +INF         
+c1.r2.k11       -89.0000          .            +INF         
+c1.r2.k12       -88.0000          .            +INF         
+c1.r2.k13       -87.0000          .            +INF         
+c1.r2.k14       -86.0000          .            +INF         
+c1.r2.k15       -85.0000          .            +INF         
+c1.r2.k16       -84.0000          .            +INF         
+c1.r2.k17       -83.0000          .            +INF         
+c1.r2.k18       -82.0000          .            +INF         
+c1.r2.k19       -81.0000          .            +INF         
+c1.r2.k20       -80.0000          .            +INF         
+c1.r3.k2        -98.0000          .            +INF         
+c1.r3.k3        -97.0000          .            +INF         
+c1.r3.k4        -96.0000          .            +INF         
+c1.r3.k5        -95.0000          .            +INF         
+c1.r3.k6        -94.0000          .            +INF         
+c1.r3.k7        -93.0000          .            +INF         
+c1.r3.k8        -92.0000          .            +INF         
+c1.r3.k9        -91.0000          .            +INF         
+c1.r3.k10       -90.0000          .            +INF         
+c1.r3.k11       -89.0000          .            +INF         
+c1.r3.k12       -88.0000          .            +INF         
+c1.r3.k13       -87.0000          .            +INF         
+c1.r3.k14       -86.0000          .            +INF         
+c1.r3.k15       -85.0000          .            +INF         
+c1.r3.k16       -84.0000          .            +INF         
+c1.r3.k17       -83.0000          .            +INF         
+c1.r3.k18       -82.0000          .            +INF         
+c1.r3.k19       -81.0000          .            +INF         
+c1.r3.k20       -80.0000          .            +INF         
+c1.r4.k2        -98.0000          .            +INF         
+c1.r4.k3        -97.0000          .            +INF         
+c1.r4.k4        -96.0000          .            +INF         
+c1.r4.k5        -95.0000          .            +INF         
+c1.r4.k6        -94.0000          .            +INF         
+c1.r4.k7        -93.0000          .            +INF         
+c1.r4.k8        -92.0000          .            +INF         
+c1.r4.k9        -91.0000          .            +INF         
+c1.r4.k10       -90.0000          .            +INF         
+c1.r4.k11       -89.0000          .            +INF         
+c1.r4.k12       -88.0000          .            +INF         
+c1.r4.k13       -87.0000          .            +INF         
+c1.r4.k14       -86.0000          .            +INF         
+c1.r4.k15       -85.0000          .            +INF         
+c1.r4.k16       -84.0000          .            +INF         
+c1.r4.k17       -83.0000          .            +INF         
+c1.r4.k18       -82.0000          .            +INF         
+c1.r4.k19       -81.0000          .            +INF         
+c1.r4.k20       -80.0000          .            +INF         
+c1.r5.k2        -58.0000          .            +INF         
+c1.r5.k3        -57.0000          .            +INF         
+c1.r5.k4        -56.0000          .            +INF         
+c1.r5.k5        -55.0000          .            +INF         
+c1.r5.k6        -54.0000          .            +INF         
+c1.r5.k7        -53.0000          .            +INF         
+c1.r5.k8        -52.0000          .            +INF         
+c1.r5.k9        -51.0000          .            +INF         
+c1.r5.k10       -50.0000          .            +INF         
+c1.r5.k11       -49.0000          .            +INF         
+c1.r5.k12       -48.0000          .            +INF         
+c1.r5.k13       -47.0000          .            +INF         
+c1.r5.k14       -46.0000          .            +INF         
+c1.r5.k15       -45.0000          .            +INF         
+c1.r5.k16       -44.0000          .            +INF         
+c1.r5.k17       -43.0000          .            +INF         
+c1.r5.k18       -42.0000          .            +INF         
+c1.r5.k19       -41.0000          .            +INF         
+c1.r5.k20       -40.0000          .            +INF         
+c2.r1.k2        -98.0000         7.0000        +INF         
+c2.r1.k3        -97.0000         7.0000        +INF         
+c2.r1.k4        -96.0000         7.0000        +INF         
+c2.r1.k5        -95.0000         7.0000        +INF         
+c2.r1.k6        -94.0000         7.0000        +INF         
+c2.r1.k7        -93.0000       -93.0000        +INF         
+c2.r1.k8        -92.0000         7.0000        +INF         
+c2.r1.k9        -91.0000         7.0000        +INF         
+c2.r1.k10       -90.0000         7.0000        +INF         
+c2.r1.k11       -89.0000         7.0000        +INF         
+c2.r1.k12       -88.0000         7.0000        +INF         
+c2.r1.k13       -87.0000         7.0000        +INF         
+c2.r1.k14       -86.0000         7.0000        +INF         
+c2.r1.k15       -85.0000         7.0000        +INF         
+c2.r1.k16       -84.0000         7.0000        +INF         
+c2.r1.k17       -83.0000         7.0000        +INF         
+c2.r1.k18       -82.0000         7.0000        +INF         
+c2.r1.k19       -81.0000         7.0000        +INF         
+c2.r1.k20       -80.0000         7.0000        +INF         
+c2.r2.k2       -158.0000      -158.0000        +INF         
+c2.r2.k3       -157.0000         2.0000        +INF         
+c2.r2.k4       -156.0000         2.0000        +INF         
+c2.r2.k5       -155.0000         2.0000        +INF         
+c2.r2.k6       -154.0000         2.0000        +INF         
+c2.r2.k7       -153.0000         2.0000        +INF         
+c2.r2.k8       -152.0000         2.0000        +INF         
+c2.r2.k9       -151.0000         2.0000        +INF         
+c2.r2.k10      -150.0000         2.0000        +INF         
+c2.r2.k11      -149.0000         2.0000        +INF         
+c2.r2.k12      -148.0000         2.0000        +INF         
+c2.r2.k13      -147.0000         2.0000        +INF         
+c2.r2.k14      -146.0000         2.0000        +INF         
+c2.r2.k15      -145.0000         2.0000        +INF         
+c2.r2.k16      -144.0000         2.0000        +INF         
+c2.r2.k17      -143.0000         2.0000        +INF         
+c2.r2.k18      -142.0000         2.0000        +INF         
+c2.r2.k19      -141.0000         2.0000        +INF         
+c2.r2.k20      -140.0000         2.0000        +INF         
+c2.r3.k2       -158.0000         4.0000        +INF         
+c2.r3.k3       -157.0000         4.0000        +INF         
+c2.r3.k4       -156.0000      -156.0000        +INF         
+c2.r3.k5       -155.0000         4.0000        +INF         
+c2.r3.k6       -154.0000         4.0000        +INF         
+c2.r3.k7       -153.0000         4.0000        +INF         
+c2.r3.k8       -152.0000         4.0000        +INF         
+c2.r3.k9       -151.0000         4.0000        +INF         
+c2.r3.k10      -150.0000         4.0000        +INF         
+c2.r3.k11      -149.0000         4.0000        +INF         
+c2.r3.k12      -148.0000         4.0000        +INF         
+c2.r3.k13      -147.0000         4.0000        +INF         
+c2.r3.k14      -146.0000         4.0000        +INF         
+c2.r3.k15      -145.0000         4.0000        +INF         
+c2.r3.k16      -144.0000         4.0000        +INF         
+c2.r3.k17      -143.0000         4.0000        +INF         
+c2.r3.k18      -142.0000         4.0000        +INF         
+c2.r3.k19      -141.0000         4.0000        +INF         
+c2.r3.k20      -140.0000         4.0000        +INF         
+c2.r4.k2       -158.0000         4.0000        +INF         
+c2.r4.k3       -157.0000         4.0000        +INF         
+c2.r4.k4       -156.0000      -156.0000        +INF         
+c2.r4.k5       -155.0000         4.0000        +INF         
+c2.r4.k6       -154.0000         4.0000        +INF         
+c2.r4.k7       -153.0000         4.0000        +INF         
+c2.r4.k8       -152.0000         4.0000        +INF         
+c2.r4.k9       -151.0000         4.0000        +INF         
+c2.r4.k10      -150.0000         4.0000        +INF         
+c2.r4.k11      -149.0000         4.0000        +INF         
+c2.r4.k12      -148.0000         4.0000        +INF         
+c2.r4.k13      -147.0000         4.0000        +INF         
+c2.r4.k14      -146.0000         4.0000        +INF         
+c2.r4.k15      -145.0000         4.0000        +INF         
+c2.r4.k16      -144.0000         4.0000        +INF         
+c2.r4.k17      -143.0000         4.0000        +INF         
+c2.r4.k18      -142.0000         4.0000        +INF         
+c2.r4.k19      -141.0000         4.0000        +INF         
+c2.r4.k20      -140.0000         4.0000        +INF         
+c2.r5.k2        -98.0000         9.0000        +INF         
+c2.r5.k3        -97.0000         9.0000        +INF         
+c2.r5.k4        -96.0000         9.0000        +INF         
+c2.r5.k5        -95.0000         9.0000        +INF         
+c2.r5.k6        -94.0000         9.0000        +INF         
+c2.r5.k7        -93.0000         9.0000        +INF         
+c2.r5.k8        -92.0000         9.0000        +INF         
+c2.r5.k9        -91.0000       -91.0000        +INF         
+c2.r5.k10       -90.0000         9.0000        +INF         
+c2.r5.k11       -89.0000         9.0000        +INF         
+c2.r5.k12       -88.0000         9.0000        +INF         
+c2.r5.k13       -87.0000         9.0000        +INF         
+c2.r5.k14       -86.0000         9.0000        +INF         
+c2.r5.k15       -85.0000         9.0000        +INF         
+c2.r5.k16       -84.0000         9.0000        +INF         
+c2.r5.k17       -83.0000         9.0000        +INF         
+c2.r5.k18       -82.0000         9.0000        +INF         
+c2.r5.k19       -81.0000         9.0000        +INF         
+c2.r5.k20       -80.0000         9.0000        +INF         
+c3.r1.k2        -98.0000         3.0000        +INF         
+c3.r1.k3        -97.0000       -97.0000        +INF         
+c3.r1.k4        -96.0000         3.0000        +INF         
+c3.r1.k5        -95.0000         3.0000        +INF         
+c3.r1.k6        -94.0000         3.0000        +INF         
+c3.r1.k7        -93.0000         3.0000        +INF         
+c3.r1.k8        -92.0000         3.0000        +INF         
+c3.r1.k9        -91.0000         3.0000        +INF         
+c3.r1.k10       -90.0000         3.0000        +INF         
+c3.r1.k11       -89.0000         3.0000        +INF         
+c3.r1.k12       -88.0000         3.0000        +INF         
+c3.r1.k13       -87.0000         3.0000        +INF         
+c3.r1.k14       -86.0000         3.0000        +INF         
+c3.r1.k15       -85.0000         3.0000        +INF         
+c3.r1.k16       -84.0000         3.0000        +INF         
+c3.r1.k17       -83.0000         3.0000        +INF         
+c3.r1.k18       -82.0000         3.0000        +INF         
+c3.r1.k19       -81.0000         3.0000        +INF         
+c3.r1.k20       -80.0000         3.0000        +INF         
+c3.r2.k2       -158.0000          .            +INF         
+c3.r2.k3       -157.0000          .            +INF         
+c3.r2.k4       -156.0000          .            +INF         
+c3.r2.k5       -155.0000          .            +INF         
+c3.r2.k6       -154.0000          .            +INF         
+c3.r2.k7       -153.0000          .            +INF         
+c3.r2.k8       -152.0000          .            +INF         
+c3.r2.k9       -151.0000          .            +INF         
+c3.r2.k10      -150.0000          .            +INF         
+c3.r2.k11      -149.0000          .            +INF         
+c3.r2.k12      -148.0000          .            +INF         
+c3.r2.k13      -147.0000          .            +INF         
+c3.r2.k14      -146.0000          .            +INF         
+c3.r2.k15      -145.0000          .            +INF         
+c3.r2.k16      -144.0000          .            +INF         
+c3.r2.k17      -143.0000          .            +INF         
+c3.r2.k18      -142.0000          .            +INF         
+c3.r2.k19      -141.0000          .            +INF         
+c3.r2.k20      -140.0000          .            +INF         
+c3.r3.k2       -158.0000          .            +INF         
+c3.r3.k3       -157.0000          .            +INF         
+c3.r3.k4       -156.0000          .            +INF         
+c3.r3.k5       -155.0000          .            +INF         
+c3.r3.k6       -154.0000          .            +INF         
+c3.r3.k7       -153.0000          .            +INF         
+c3.r3.k8       -152.0000          .            +INF         
+c3.r3.k9       -151.0000          .            +INF         
+c3.r3.k10      -150.0000          .            +INF         
+c3.r3.k11      -149.0000          .            +INF         
+c3.r3.k12      -148.0000          .            +INF         
+c3.r3.k13      -147.0000          .            +INF         
+c3.r3.k14      -146.0000          .            +INF         
+c3.r3.k15      -145.0000          .            +INF         
+c3.r3.k16      -144.0000          .            +INF         
+c3.r3.k17      -143.0000          .            +INF         
+c3.r3.k18      -142.0000          .            +INF         
+c3.r3.k19      -141.0000          .            +INF         
+c3.r3.k20      -140.0000          .            +INF         
+c3.r4.k2       -158.0000          .            +INF         
+c3.r4.k3       -157.0000          .            +INF         
+c3.r4.k4       -156.0000          .            +INF         
+c3.r4.k5       -155.0000          .            +INF         
+c3.r4.k6       -154.0000          .            +INF         
+c3.r4.k7       -153.0000          .            +INF         
+c3.r4.k8       -152.0000          .            +INF         
+c3.r4.k9       -151.0000          .            +INF         
+c3.r4.k10      -150.0000          .            +INF         
+c3.r4.k11      -149.0000          .            +INF         
+c3.r4.k12      -148.0000          .            +INF         
+c3.r4.k13      -147.0000          .            +INF         
+c3.r4.k14      -146.0000          .            +INF         
+c3.r4.k15      -145.0000          .            +INF         
+c3.r4.k16      -144.0000          .            +INF         
+c3.r4.k17      -143.0000          .            +INF         
+c3.r4.k18      -142.0000          .            +INF         
+c3.r4.k19      -141.0000          .            +INF         
+c3.r4.k20      -140.0000          .            +INF         
+c3.r5.k2        -98.0000         5.0000        +INF         
+c3.r5.k3        -97.0000         5.0000        +INF         
+c3.r5.k4        -96.0000         5.0000        +INF         
+c3.r5.k5        -95.0000       -95.0000        +INF         
+c3.r5.k6        -94.0000         5.0000        +INF         
+c3.r5.k7        -93.0000         5.0000        +INF         
+c3.r5.k8        -92.0000         5.0000        +INF         
+c3.r5.k9        -91.0000         5.0000        +INF         
+c3.r5.k10       -90.0000         5.0000        +INF         
+c3.r5.k11       -89.0000         5.0000        +INF         
+c3.r5.k12       -88.0000         5.0000        +INF         
+c3.r5.k13       -87.0000         5.0000        +INF         
+c3.r5.k14       -86.0000         5.0000        +INF         
+c3.r5.k15       -85.0000         5.0000        +INF         
+c3.r5.k16       -84.0000         5.0000        +INF         
+c3.r5.k17       -83.0000         5.0000        +INF         
+c3.r5.k18       -82.0000         5.0000        +INF         
+c3.r5.k19       -81.0000         5.0000        +INF         
+c3.r5.k20       -80.0000         5.0000        +INF         
+c4.r1.k2        -58.0000         8.0000        +INF         
+c4.r1.k3        -57.0000         8.0000        +INF         
+c4.r1.k4        -56.0000         8.0000        +INF         
+c4.r1.k5        -55.0000         8.0000        +INF         
+c4.r1.k6        -54.0000         8.0000        +INF         
+c4.r1.k7        -53.0000         8.0000        +INF         
+c4.r1.k8        -52.0000       -52.0000        +INF         
+c4.r1.k9        -51.0000         8.0000        +INF         
+c4.r1.k10       -50.0000         8.0000        +INF         
+c4.r1.k11       -49.0000         8.0000        +INF         
+c4.r1.k12       -48.0000         8.0000        +INF         
+c4.r1.k13       -47.0000         8.0000        +INF         
+c4.r1.k14       -46.0000         8.0000        +INF         
+c4.r1.k15       -45.0000         8.0000        +INF         
+c4.r1.k16       -44.0000         8.0000        +INF         
+c4.r1.k17       -43.0000         8.0000        +INF         
+c4.r1.k18       -42.0000         8.0000        +INF         
+c4.r1.k19       -41.0000         8.0000        +INF         
+c4.r1.k20       -40.0000         8.0000        +INF         
+c4.r2.k2        -98.0000         4.0000        +INF         
+c4.r2.k3        -97.0000         4.0000        +INF         
+c4.r2.k4        -96.0000       -96.0000        +INF         
+c4.r2.k5        -95.0000         4.0000        +INF         
+c4.r2.k6        -94.0000         4.0000        +INF         
+c4.r2.k7        -93.0000         4.0000        +INF         
+c4.r2.k8        -92.0000         4.0000        +INF         
+c4.r2.k9        -91.0000         4.0000        +INF         
+c4.r2.k10       -90.0000         4.0000        +INF         
+c4.r2.k11       -89.0000         4.0000        +INF         
+c4.r2.k12       -88.0000         4.0000        +INF         
+c4.r2.k13       -87.0000         4.0000        +INF         
+c4.r2.k14       -86.0000         4.0000        +INF         
+c4.r2.k15       -85.0000         4.0000        +INF         
+c4.r2.k16       -84.0000         4.0000        +INF         
+c4.r2.k17       -83.0000         4.0000        +INF         
+c4.r2.k18       -82.0000         4.0000        +INF         
+c4.r2.k19       -81.0000         4.0000        +INF         
+c4.r2.k20       -80.0000         4.0000        +INF         
+c4.r3.k2        -98.0000        11.0000        +INF         
+c4.r3.k3        -97.0000        11.0000        +INF         
+c4.r3.k4        -96.0000        11.0000        +INF         
+c4.r3.k5        -95.0000        11.0000        +INF         
+c4.r3.k6        -94.0000        11.0000        +INF         
+c4.r3.k7        -93.0000        11.0000        +INF         
+c4.r3.k8        -92.0000        11.0000        +INF         
+c4.r3.k9        -91.0000        11.0000        +INF         
+c4.r3.k10       -90.0000        11.0000        +INF         
+c4.r3.k11       -89.0000       -89.0000        +INF         
+c4.r3.k12       -88.0000        11.0000        +INF         
+c4.r3.k13       -87.0000        11.0000        +INF         
+c4.r3.k14       -86.0000        11.0000        +INF         
+c4.r3.k15       -85.0000        11.0000        +INF         
+c4.r3.k16       -84.0000        11.0000        +INF         
+c4.r3.k17       -83.0000        11.0000        +INF         
+c4.r3.k18       -82.0000        11.0000        +INF         
+c4.r3.k19       -81.0000        11.0000        +INF         
+c4.r3.k20       -80.0000        11.0000        +INF         
+c4.r4.k2        -98.0000         6.0000        +INF         
+c4.r4.k3        -97.0000         6.0000        +INF         
+c4.r4.k4        -96.0000         6.0000        +INF         
+c4.r4.k5        -95.0000         6.0000        +INF         
+c4.r4.k6        -94.0000       -94.0000        +INF         
+c4.r4.k7        -93.0000         6.0000        +INF         
+c4.r4.k8        -92.0000         6.0000        +INF         
+c4.r4.k9        -91.0000         6.0000        +INF         
+c4.r4.k10       -90.0000         6.0000        +INF         
+c4.r4.k11       -89.0000         6.0000        +INF         
+c4.r4.k12       -88.0000         6.0000        +INF         
+c4.r4.k13       -87.0000         6.0000        +INF         
+c4.r4.k14       -86.0000         6.0000        +INF         
+c4.r4.k15       -85.0000         6.0000        +INF         
+c4.r4.k16       -84.0000         6.0000        +INF         
+c4.r4.k17       -83.0000         6.0000        +INF         
+c4.r4.k18       -82.0000         6.0000        +INF         
+c4.r4.k19       -81.0000         6.0000        +INF         
+c4.r4.k20       -80.0000         6.0000        +INF         
+c4.r5.k2        -58.0000          .            +INF         
+c4.r5.k3        -57.0000          .            +INF         
+c4.r5.k4        -56.0000          .            +INF         
+c4.r5.k5        -55.0000          .            +INF         
+c4.r5.k6        -54.0000          .            +INF         
+c4.r5.k7        -53.0000          .            +INF         
+c4.r5.k8        -52.0000          .            +INF         
+c4.r5.k9        -51.0000          .            +INF         
+c4.r5.k10       -50.0000          .            +INF         
+c4.r5.k11       -49.0000          .            +INF         
+c4.r5.k12       -48.0000          .            +INF         
+c4.r5.k13       -47.0000          .            +INF         
+c4.r5.k14       -46.0000          .            +INF         
+c4.r5.k15       -45.0000          .            +INF         
+c4.r5.k16       -44.0000          .            +INF         
+c4.r5.k17       -43.0000          .            +INF         
+c4.r5.k18       -42.0000          .            +INF         
+c4.r5.k19       -41.0000          .            +INF         
+c4.r5.k20       -40.0000          .            +INF         
+
+---- EQU neighborhoodUB  
+
+                 LOWER          LEVEL          UPPER
+
+c1.r1.k2         -INF           10.0000        62.0000      
+c1.r1.k3         -INF           10.0000        63.0000      
+c1.r1.k4         -INF           10.0000        64.0000      
+c1.r1.k5         -INF           10.0000        65.0000      
+c1.r1.k6         -INF           10.0000        66.0000      
+c1.r1.k7         -INF           10.0000        67.0000      
+c1.r1.k8         -INF           10.0000        68.0000      
+c1.r1.k9         -INF           10.0000        69.0000      
+c1.r1.k10        -INF           70.0000        70.0000      
+c1.r1.k11        -INF           10.0000        71.0000      
+c1.r1.k12        -INF           10.0000        72.0000      
+c1.r1.k13        -INF           10.0000        73.0000      
+c1.r1.k14        -INF           10.0000        74.0000      
+c1.r1.k15        -INF           10.0000        75.0000      
+c1.r1.k16        -INF           10.0000        76.0000      
+c1.r1.k17        -INF           10.0000        77.0000      
+c1.r1.k18        -INF           10.0000        78.0000      
+c1.r1.k19        -INF           10.0000        79.0000      
+c1.r1.k20        -INF           10.0000        80.0000      
+c1.r2.k2         -INF             .           102.0000      
+c1.r2.k3         -INF             .           103.0000      
+c1.r2.k4         -INF             .           104.0000      
+c1.r2.k5         -INF             .           105.0000      
+c1.r2.k6         -INF             .           106.0000      
+c1.r2.k7         -INF             .           107.0000      
+c1.r2.k8         -INF             .           108.0000      
+c1.r2.k9         -INF             .           109.0000      
+c1.r2.k10        -INF             .           110.0000      
+c1.r2.k11        -INF             .           111.0000      
+c1.r2.k12        -INF             .           112.0000      
+c1.r2.k13        -INF             .           113.0000      
+c1.r2.k14        -INF             .           114.0000      
+c1.r2.k15        -INF             .           115.0000      
+c1.r2.k16        -INF             .           116.0000      
+c1.r2.k17        -INF             .           117.0000      
+c1.r2.k18        -INF             .           118.0000      
+c1.r2.k19        -INF             .           119.0000      
+c1.r2.k20        -INF             .           120.0000      
+c1.r3.k2         -INF             .           102.0000      
+c1.r3.k3         -INF             .           103.0000      
+c1.r3.k4         -INF             .           104.0000      
+c1.r3.k5         -INF             .           105.0000      
+c1.r3.k6         -INF             .           106.0000      
+c1.r3.k7         -INF             .           107.0000      
+c1.r3.k8         -INF             .           108.0000      
+c1.r3.k9         -INF             .           109.0000      
+c1.r3.k10        -INF             .           110.0000      
+c1.r3.k11        -INF             .           111.0000      
+c1.r3.k12        -INF             .           112.0000      
+c1.r3.k13        -INF             .           113.0000      
+c1.r3.k14        -INF             .           114.0000      
+c1.r3.k15        -INF             .           115.0000      
+c1.r3.k16        -INF             .           116.0000      
+c1.r3.k17        -INF             .           117.0000      
+c1.r3.k18        -INF             .           118.0000      
+c1.r3.k19        -INF             .           119.0000      
+c1.r3.k20        -INF             .           120.0000      
+c1.r4.k2         -INF             .           102.0000      
+c1.r4.k3         -INF             .           103.0000      
+c1.r4.k4         -INF             .           104.0000      
+c1.r4.k5         -INF             .           105.0000      
+c1.r4.k6         -INF             .           106.0000      
+c1.r4.k7         -INF             .           107.0000      
+c1.r4.k8         -INF             .           108.0000      
+c1.r4.k9         -INF             .           109.0000      
+c1.r4.k10        -INF             .           110.0000      
+c1.r4.k11        -INF             .           111.0000      
+c1.r4.k12        -INF             .           112.0000      
+c1.r4.k13        -INF             .           113.0000      
+c1.r4.k14        -INF             .           114.0000      
+c1.r4.k15        -INF             .           115.0000      
+c1.r4.k16        -INF             .           116.0000      
+c1.r4.k17        -INF             .           117.0000      
+c1.r4.k18        -INF             .           118.0000      
+c1.r4.k19        -INF             .           119.0000      
+c1.r4.k20        -INF             .           120.0000      
+c1.r5.k2         -INF             .            62.0000      
+c1.r5.k3         -INF             .            63.0000      
+c1.r5.k4         -INF             .            64.0000      
+c1.r5.k5         -INF             .            65.0000      
+c1.r5.k6         -INF             .            66.0000      
+c1.r5.k7         -INF             .            67.0000      
+c1.r5.k8         -INF             .            68.0000      
+c1.r5.k9         -INF             .            69.0000      
+c1.r5.k10        -INF             .            70.0000      
+c1.r5.k11        -INF             .            71.0000      
+c1.r5.k12        -INF             .            72.0000      
+c1.r5.k13        -INF             .            73.0000      
+c1.r5.k14        -INF             .            74.0000      
+c1.r5.k15        -INF             .            75.0000      
+c1.r5.k16        -INF             .            76.0000      
+c1.r5.k17        -INF             .            77.0000      
+c1.r5.k18        -INF             .            78.0000      
+c1.r5.k19        -INF             .            79.0000      
+c1.r5.k20        -INF             .            80.0000      
+c2.r1.k2         -INF            7.0000       102.0000      
+c2.r1.k3         -INF            7.0000       103.0000      
+c2.r1.k4         -INF            7.0000       104.0000      
+c2.r1.k5         -INF            7.0000       105.0000      
+c2.r1.k6         -INF            7.0000       106.0000      
+c2.r1.k7         -INF          107.0000       107.0000      
+c2.r1.k8         -INF            7.0000       108.0000      
+c2.r1.k9         -INF            7.0000       109.0000      
+c2.r1.k10        -INF            7.0000       110.0000      
+c2.r1.k11        -INF            7.0000       111.0000      
+c2.r1.k12        -INF            7.0000       112.0000      
+c2.r1.k13        -INF            7.0000       113.0000      
+c2.r1.k14        -INF            7.0000       114.0000      
+c2.r1.k15        -INF            7.0000       115.0000      
+c2.r1.k16        -INF            7.0000       116.0000      
+c2.r1.k17        -INF            7.0000       117.0000      
+c2.r1.k18        -INF            7.0000       118.0000      
+c2.r1.k19        -INF            7.0000       119.0000      
+c2.r1.k20        -INF            7.0000       120.0000      
+c2.r2.k2         -INF          162.0000       162.0000      
+c2.r2.k3         -INF            2.0000       163.0000      
+c2.r2.k4         -INF            2.0000       164.0000      
+c2.r2.k5         -INF            2.0000       165.0000      
+c2.r2.k6         -INF            2.0000       166.0000      
+c2.r2.k7         -INF            2.0000       167.0000      
+c2.r2.k8         -INF            2.0000       168.0000      
+c2.r2.k9         -INF            2.0000       169.0000      
+c2.r2.k10        -INF            2.0000       170.0000      
+c2.r2.k11        -INF            2.0000       171.0000      
+c2.r2.k12        -INF            2.0000       172.0000      
+c2.r2.k13        -INF            2.0000       173.0000      
+c2.r2.k14        -INF            2.0000       174.0000      
+c2.r2.k15        -INF            2.0000       175.0000      
+c2.r2.k16        -INF            2.0000       176.0000      
+c2.r2.k17        -INF            2.0000       177.0000      
+c2.r2.k18        -INF            2.0000       178.0000      
+c2.r2.k19        -INF            2.0000       179.0000      
+c2.r2.k20        -INF            2.0000       180.0000      
+c2.r3.k2         -INF            4.0000       162.0000      
+c2.r3.k3         -INF            4.0000       163.0000      
+c2.r3.k4         -INF          164.0000       164.0000      
+c2.r3.k5         -INF            4.0000       165.0000      
+c2.r3.k6         -INF            4.0000       166.0000      
+c2.r3.k7         -INF            4.0000       167.0000      
+c2.r3.k8         -INF            4.0000       168.0000      
+c2.r3.k9         -INF            4.0000       169.0000      
+c2.r3.k10        -INF            4.0000       170.0000      
+c2.r3.k11        -INF            4.0000       171.0000      
+c2.r3.k12        -INF            4.0000       172.0000      
+c2.r3.k13        -INF            4.0000       173.0000      
+c2.r3.k14        -INF            4.0000       174.0000      
+c2.r3.k15        -INF            4.0000       175.0000      
+c2.r3.k16        -INF            4.0000       176.0000      
+c2.r3.k17        -INF            4.0000       177.0000      
+c2.r3.k18        -INF            4.0000       178.0000      
+c2.r3.k19        -INF            4.0000       179.0000      
+c2.r3.k20        -INF            4.0000       180.0000      
+c2.r4.k2         -INF            4.0000       162.0000      
+c2.r4.k3         -INF            4.0000       163.0000      
+c2.r4.k4         -INF          164.0000       164.0000      
+c2.r4.k5         -INF            4.0000       165.0000      
+c2.r4.k6         -INF            4.0000       166.0000      
+c2.r4.k7         -INF            4.0000       167.0000      
+c2.r4.k8         -INF            4.0000       168.0000      
+c2.r4.k9         -INF            4.0000       169.0000      
+c2.r4.k10        -INF            4.0000       170.0000      
+c2.r4.k11        -INF            4.0000       171.0000      
+c2.r4.k12        -INF            4.0000       172.0000      
+c2.r4.k13        -INF            4.0000       173.0000      
+c2.r4.k14        -INF            4.0000       174.0000      
+c2.r4.k15        -INF            4.0000       175.0000      
+c2.r4.k16        -INF            4.0000       176.0000      
+c2.r4.k17        -INF            4.0000       177.0000      
+c2.r4.k18        -INF            4.0000       178.0000      
+c2.r4.k19        -INF            4.0000       179.0000      
+c2.r4.k20        -INF            4.0000       180.0000      
+c2.r5.k2         -INF            9.0000       102.0000      
+c2.r5.k3         -INF            9.0000       103.0000      
+c2.r5.k4         -INF            9.0000       104.0000      
+c2.r5.k5         -INF            9.0000       105.0000      
+c2.r5.k6         -INF            9.0000       106.0000      
+c2.r5.k7         -INF            9.0000       107.0000      
+c2.r5.k8         -INF            9.0000       108.0000      
+c2.r5.k9         -INF          109.0000       109.0000      
+c2.r5.k10        -INF            9.0000       110.0000      
+c2.r5.k11        -INF            9.0000       111.0000      
+c2.r5.k12        -INF            9.0000       112.0000      
+c2.r5.k13        -INF            9.0000       113.0000      
+c2.r5.k14        -INF            9.0000       114.0000      
+c2.r5.k15        -INF            9.0000       115.0000      
+c2.r5.k16        -INF            9.0000       116.0000      
+c2.r5.k17        -INF            9.0000       117.0000      
+c2.r5.k18        -INF            9.0000       118.0000      
+c2.r5.k19        -INF            9.0000       119.0000      
+c2.r5.k20        -INF            9.0000       120.0000      
+c3.r1.k2         -INF            3.0000       102.0000      
+c3.r1.k3         -INF          103.0000       103.0000      
+c3.r1.k4         -INF            3.0000       104.0000      
+c3.r1.k5         -INF            3.0000       105.0000      
+c3.r1.k6         -INF            3.0000       106.0000      
+c3.r1.k7         -INF            3.0000       107.0000      
+c3.r1.k8         -INF            3.0000       108.0000      
+c3.r1.k9         -INF            3.0000       109.0000      
+c3.r1.k10        -INF            3.0000       110.0000      
+c3.r1.k11        -INF            3.0000       111.0000      
+c3.r1.k12        -INF            3.0000       112.0000      
+c3.r1.k13        -INF            3.0000       113.0000      
+c3.r1.k14        -INF            3.0000       114.0000      
+c3.r1.k15        -INF            3.0000       115.0000      
+c3.r1.k16        -INF            3.0000       116.0000      
+c3.r1.k17        -INF            3.0000       117.0000      
+c3.r1.k18        -INF            3.0000       118.0000      
+c3.r1.k19        -INF            3.0000       119.0000      
+c3.r1.k20        -INF            3.0000       120.0000      
+c3.r2.k2         -INF             .           162.0000      
+c3.r2.k3         -INF             .           163.0000      
+c3.r2.k4         -INF             .           164.0000      
+c3.r2.k5         -INF             .           165.0000      
+c3.r2.k6         -INF             .           166.0000      
+c3.r2.k7         -INF             .           167.0000      
+c3.r2.k8         -INF             .           168.0000      
+c3.r2.k9         -INF             .           169.0000      
+c3.r2.k10        -INF             .           170.0000      
+c3.r2.k11        -INF             .           171.0000      
+c3.r2.k12        -INF             .           172.0000      
+c3.r2.k13        -INF             .           173.0000      
+c3.r2.k14        -INF             .           174.0000      
+c3.r2.k15        -INF             .           175.0000      
+c3.r2.k16        -INF             .           176.0000      
+c3.r2.k17        -INF             .           177.0000      
+c3.r2.k18        -INF             .           178.0000      
+c3.r2.k19        -INF             .           179.0000      
+c3.r2.k20        -INF             .           180.0000      
+c3.r3.k2         -INF             .           162.0000      
+c3.r3.k3         -INF             .           163.0000      
+c3.r3.k4         -INF             .           164.0000      
+c3.r3.k5         -INF             .           165.0000      
+c3.r3.k6         -INF             .           166.0000      
+c3.r3.k7         -INF             .           167.0000      
+c3.r3.k8         -INF             .           168.0000      
+c3.r3.k9         -INF             .           169.0000      
+c3.r3.k10        -INF             .           170.0000      
+c3.r3.k11        -INF             .           171.0000      
+c3.r3.k12        -INF             .           172.0000      
+c3.r3.k13        -INF             .           173.0000      
+c3.r3.k14        -INF             .           174.0000      
+c3.r3.k15        -INF             .           175.0000      
+c3.r3.k16        -INF             .           176.0000      
+c3.r3.k17        -INF             .           177.0000      
+c3.r3.k18        -INF             .           178.0000      
+c3.r3.k19        -INF             .           179.0000      
+c3.r3.k20        -INF             .           180.0000      
+c3.r4.k2         -INF             .           162.0000      
+c3.r4.k3         -INF             .           163.0000      
+c3.r4.k4         -INF             .           164.0000      
+c3.r4.k5         -INF             .           165.0000      
+c3.r4.k6         -INF             .           166.0000      
+c3.r4.k7         -INF             .           167.0000      
+c3.r4.k8         -INF             .           168.0000      
+c3.r4.k9         -INF             .           169.0000      
+c3.r4.k10        -INF             .           170.0000      
+c3.r4.k11        -INF             .           171.0000      
+c3.r4.k12        -INF             .           172.0000      
+c3.r4.k13        -INF             .           173.0000      
+c3.r4.k14        -INF             .           174.0000      
+c3.r4.k15        -INF             .           175.0000      
+c3.r4.k16        -INF             .           176.0000      
+c3.r4.k17        -INF             .           177.0000      
+c3.r4.k18        -INF             .           178.0000      
+c3.r4.k19        -INF             .           179.0000      
+c3.r4.k20        -INF             .           180.0000      
+c3.r5.k2         -INF            5.0000       102.0000      
+c3.r5.k3         -INF            5.0000       103.0000      
+c3.r5.k4         -INF            5.0000       104.0000      
+c3.r5.k5         -INF          105.0000       105.0000      
+c3.r5.k6         -INF            5.0000       106.0000      
+c3.r5.k7         -INF            5.0000       107.0000      
+c3.r5.k8         -INF            5.0000       108.0000      
+c3.r5.k9         -INF            5.0000       109.0000      
+c3.r5.k10        -INF            5.0000       110.0000      
+c3.r5.k11        -INF            5.0000       111.0000      
+c3.r5.k12        -INF            5.0000       112.0000      
+c3.r5.k13        -INF            5.0000       113.0000      
+c3.r5.k14        -INF            5.0000       114.0000      
+c3.r5.k15        -INF            5.0000       115.0000      
+c3.r5.k16        -INF            5.0000       116.0000      
+c3.r5.k17        -INF            5.0000       117.0000      
+c3.r5.k18        -INF            5.0000       118.0000      
+c3.r5.k19        -INF            5.0000       119.0000      
+c3.r5.k20        -INF            5.0000       120.0000      
+c4.r1.k2         -INF            8.0000        62.0000      
+c4.r1.k3         -INF            8.0000        63.0000      
+c4.r1.k4         -INF            8.0000        64.0000      
+c4.r1.k5         -INF            8.0000        65.0000      
+c4.r1.k6         -INF            8.0000        66.0000      
+c4.r1.k7         -INF            8.0000        67.0000      
+c4.r1.k8         -INF           68.0000        68.0000      
+c4.r1.k9         -INF            8.0000        69.0000      
+c4.r1.k10        -INF            8.0000        70.0000      
+c4.r1.k11        -INF            8.0000        71.0000      
+c4.r1.k12        -INF            8.0000        72.0000      
+c4.r1.k13        -INF            8.0000        73.0000      
+c4.r1.k14        -INF            8.0000        74.0000      
+c4.r1.k15        -INF            8.0000        75.0000      
+c4.r1.k16        -INF            8.0000        76.0000      
+c4.r1.k17        -INF            8.0000        77.0000      
+c4.r1.k18        -INF            8.0000        78.0000      
+c4.r1.k19        -INF            8.0000        79.0000      
+c4.r1.k20        -INF            8.0000        80.0000      
+c4.r2.k2         -INF            4.0000       102.0000      
+c4.r2.k3         -INF            4.0000       103.0000      
+c4.r2.k4         -INF          104.0000       104.0000      
+c4.r2.k5         -INF            4.0000       105.0000      
+c4.r2.k6         -INF            4.0000       106.0000      
+c4.r2.k7         -INF            4.0000       107.0000      
+c4.r2.k8         -INF            4.0000       108.0000      
+c4.r2.k9         -INF            4.0000       109.0000      
+c4.r2.k10        -INF            4.0000       110.0000      
+c4.r2.k11        -INF            4.0000       111.0000      
+c4.r2.k12        -INF            4.0000       112.0000      
+c4.r2.k13        -INF            4.0000       113.0000      
+c4.r2.k14        -INF            4.0000       114.0000      
+c4.r2.k15        -INF            4.0000       115.0000      
+c4.r2.k16        -INF            4.0000       116.0000      
+c4.r2.k17        -INF            4.0000       117.0000      
+c4.r2.k18        -INF            4.0000       118.0000      
+c4.r2.k19        -INF            4.0000       119.0000      
+c4.r2.k20        -INF            4.0000       120.0000      
+c4.r3.k2         -INF           11.0000       102.0000      
+c4.r3.k3         -INF           11.0000       103.0000      
+c4.r3.k4         -INF           11.0000       104.0000      
+c4.r3.k5         -INF           11.0000       105.0000      
+c4.r3.k6         -INF           11.0000       106.0000      
+c4.r3.k7         -INF           11.0000       107.0000      
+c4.r3.k8         -INF           11.0000       108.0000      
+c4.r3.k9         -INF           11.0000       109.0000      
+c4.r3.k10        -INF           11.0000       110.0000      
+c4.r3.k11        -INF          111.0000       111.0000      
+c4.r3.k12        -INF           11.0000       112.0000      
+c4.r3.k13        -INF           11.0000       113.0000      
+c4.r3.k14        -INF           11.0000       114.0000      
+c4.r3.k15        -INF           11.0000       115.0000      
+c4.r3.k16        -INF           11.0000       116.0000      
+c4.r3.k17        -INF           11.0000       117.0000      
+c4.r3.k18        -INF           11.0000       118.0000      
+c4.r3.k19        -INF           11.0000       119.0000      
+c4.r3.k20        -INF           11.0000       120.0000      
+c4.r4.k2         -INF            6.0000       102.0000      
+c4.r4.k3         -INF            6.0000       103.0000      
+c4.r4.k4         -INF            6.0000       104.0000      
+c4.r4.k5         -INF            6.0000       105.0000      
+c4.r4.k6         -INF          106.0000       106.0000      
+c4.r4.k7         -INF            6.0000       107.0000      
+c4.r4.k8         -INF            6.0000       108.0000      
+c4.r4.k9         -INF            6.0000       109.0000      
+c4.r4.k10        -INF            6.0000       110.0000      
+c4.r4.k11        -INF            6.0000       111.0000      
+c4.r4.k12        -INF            6.0000       112.0000      
+c4.r4.k13        -INF            6.0000       113.0000      
+c4.r4.k14        -INF            6.0000       114.0000      
+c4.r4.k15        -INF            6.0000       115.0000      
+c4.r4.k16        -INF            6.0000       116.0000      
+c4.r4.k17        -INF            6.0000       117.0000      
+c4.r4.k18        -INF            6.0000       118.0000      
+c4.r4.k19        -INF            6.0000       119.0000      
+c4.r4.k20        -INF            6.0000       120.0000      
+c4.r5.k2         -INF             .            62.0000      
+c4.r5.k3         -INF             .            63.0000      
+c4.r5.k4         -INF             .            64.0000      
+c4.r5.k5         -INF             .            65.0000      
+c4.r5.k6         -INF             .            66.0000      
+c4.r5.k7         -INF             .            67.0000      
+c4.r5.k8         -INF             .            68.0000      
+c4.r5.k9         -INF             .            69.0000      
+c4.r5.k10        -INF             .            70.0000      
+c4.r5.k11        -INF             .            71.0000      
+c4.r5.k12        -INF             .            72.0000      
+c4.r5.k13        -INF             .            73.0000      
+c4.r5.k14        -INF             .            74.0000      
+c4.r5.k15        -INF             .            75.0000      
+c4.r5.k16        -INF             .            76.0000      
+c4.r5.k17        -INF             .            77.0000      
+c4.r5.k18        -INF             .            78.0000      
+c4.r5.k19        -INF             .            79.0000      
+c4.r5.k20        -INF             .            80.0000      
+
+---- EQU nullRule  
+
+                   LOWER          LEVEL          UPPER
+
+c1.r1.c1.r2        -INF            1.0000         1.0000      
+c1.r1.c2.r1        -INF             .             1.0000      
+c1.r1.c2.r2        -INF             .             1.0000      
+c1.r2.c1.r1        -INF            1.0000         1.0000      
+c1.r2.c1.r3        -INF             .             1.0000      
+c1.r2.c2.r1        -INF            1.0000         1.0000      
+c1.r2.c2.r2        -INF            1.0000         1.0000      
+c1.r2.c2.r3        -INF            1.0000         1.0000      
+c1.r3.c1.r2        -INF            1.0000         1.0000      
+c1.r3.c1.r4        -INF             .             1.0000      
+c1.r3.c2.r2        -INF             .             1.0000      
+c1.r3.c2.r3        -INF             .             1.0000      
+c1.r3.c2.r4        -INF             .             1.0000      
+c1.r4.c1.r3        -INF             .             1.0000      
+c1.r4.c1.r5        -INF             .             1.0000      
+c1.r4.c2.r3        -INF             .             1.0000      
+c1.r4.c2.r4        -INF             .             1.0000      
+c1.r4.c2.r5        -INF             .             1.0000      
+c1.r5.c1.r4        -INF             .             1.0000      
+c1.r5.c2.r4        -INF             .             1.0000      
+c1.r5.c2.r5        -INF             .             1.0000      
+c2.r1.c1.r1        -INF            1.0000         1.0000      
+c2.r1.c1.r2        -INF            1.0000         1.0000      
+c2.r1.c2.r2        -INF             .             1.0000      
+c2.r1.c3.r1        -INF             .             1.0000      
+c2.r1.c3.r2        -INF            1.0000         1.0000      
+c2.r2.c1.r1        -INF            1.0000         1.0000      
+c2.r2.c1.r2        -INF            1.0000         1.0000      
+c2.r2.c1.r3        -INF             .             1.0000      
+c2.r2.c2.r1        -INF            1.0000         1.0000      
+c2.r2.c2.r3        -INF            1.0000         1.0000      
+c2.r2.c3.r1        -INF            1.0000         1.0000      
+c2.r2.c3.r2        -INF            1.0000         1.0000      
+c2.r2.c3.r3        -INF             .             1.0000      
+c2.r3.c1.r2        -INF            1.0000         1.0000      
+c2.r3.c1.r3        -INF             .             1.0000      
+c2.r3.c1.r4        -INF             .             1.0000      
+c2.r3.c2.r2        -INF             .             1.0000      
+c2.r3.c2.r4        -INF            1.0000         1.0000      
+c2.r3.c3.r2        -INF            1.0000         1.0000      
+c2.r3.c3.r3        -INF             .             1.0000      
+c2.r3.c3.r4        -INF             .             1.0000      
+c2.r4.c1.r3        -INF             .             1.0000      
+c2.r4.c1.r4        -INF             .             1.0000      
+c2.r4.c1.r5        -INF             .             1.0000      
+c2.r4.c2.r3        -INF             .             1.0000      
+c2.r4.c2.r5        -INF            1.0000         1.0000      
+c2.r4.c3.r3        -INF             .             1.0000      
+c2.r4.c3.r4        -INF             .             1.0000      
+c2.r4.c3.r5        -INF            1.0000         1.0000      
+c2.r5.c1.r4        -INF             .             1.0000      
+c2.r5.c1.r5        -INF             .             1.0000      
+c2.r5.c2.r4        -INF             .             1.0000      
+c2.r5.c3.r4        -INF             .             1.0000      
+c2.r5.c3.r5        -INF             .             1.0000      
+c3.r1.c2.r1        -INF            1.0000         1.0000      
+c3.r1.c2.r2        -INF             .             1.0000      
+c3.r1.c3.r2        -INF            1.0000         1.0000      
+c3.r1.c4.r1        -INF            1.0000         1.0000      
+c3.r1.c4.r2        -INF            1.0000         1.0000      
+c3.r2.c2.r1        -INF            1.0000         1.0000      
+c3.r2.c2.r2        -INF            1.0000         1.0000      
+c3.r2.c2.r3        -INF            1.0000         1.0000      
+c3.r2.c3.r1        -INF            1.0000         1.0000      
+c3.r2.c3.r3        -INF             .             1.0000      
+c3.r2.c4.r1        -INF            1.0000         1.0000      
+c3.r2.c4.r2        -INF            1.0000         1.0000      
+c3.r2.c4.r3        -INF            1.0000         1.0000      
+c3.r3.c2.r2        -INF             .             1.0000      
+c3.r3.c2.r3        -INF             .             1.0000      
+c3.r3.c2.r4        -INF             .             1.0000      
+c3.r3.c3.r2        -INF            1.0000         1.0000      
+c3.r3.c3.r4        -INF             .             1.0000      
+c3.r3.c4.r2        -INF             .             1.0000      
+c3.r3.c4.r3        -INF             .             1.0000      
+c3.r3.c4.r4        -INF             .             1.0000      
+c3.r4.c2.r3        -INF             .             1.0000      
+c3.r4.c2.r4        -INF             .             1.0000      
+c3.r4.c2.r5        -INF             .             1.0000      
+c3.r4.c3.r3        -INF             .             1.0000      
+c3.r4.c3.r5        -INF             .             1.0000      
+c3.r4.c4.r3        -INF             .             1.0000      
+c3.r4.c4.r4        -INF             .             1.0000      
+c3.r4.c4.r5        -INF            1.0000         1.0000      
+c3.r5.c2.r4        -INF             .             1.0000      
+c3.r5.c2.r5        -INF            1.0000         1.0000      
+c3.r5.c3.r4        -INF             .             1.0000      
+c3.r5.c4.r4        -INF            1.0000         1.0000      
+c3.r5.c4.r5        -INF            1.0000         1.0000      
+c4.r1.c3.r1        -INF             .             1.0000      
+c4.r1.c3.r2        -INF            1.0000         1.0000      
+c4.r1.c4.r2        -INF             .             1.0000      
+c4.r2.c3.r1        -INF             .             1.0000      
+c4.r2.c3.r2        -INF            1.0000         1.0000      
+c4.r2.c3.r3        -INF             .             1.0000      
+c4.r2.c4.r1        -INF            1.0000         1.0000      
+c4.r2.c4.r3        -INF            1.0000         1.0000      
+c4.r3.c3.r2        -INF            1.0000         1.0000      
+c4.r3.c3.r3        -INF             .             1.0000      
+c4.r3.c3.r4        -INF             .             1.0000      
+c4.r3.c4.r2        -INF             .             1.0000      
+c4.r3.c4.r4        -INF             .             1.0000      
+c4.r4.c3.r3        -INF             .             1.0000      
+c4.r4.c3.r4        -INF             .             1.0000      
+c4.r4.c3.r5        -INF             .             1.0000      
+c4.r4.c4.r3        -INF            1.0000         1.0000      
+c4.r4.c4.r5        -INF            1.0000         1.0000      
+c4.r5.c3.r4        -INF             .             1.0000      
+c4.r5.c3.r5        -INF            1.0000         1.0000      
+c4.r5.c4.r4        -INF            1.0000         1.0000      
+
+                           LOWER          LEVEL          UPPER
+
+---- EQU firstDeno~         1.0000         1.0000         1.0000      
+
+---- VAR x  1 if cell CR receives denomination k
+
+                 LOWER          LEVEL          UPPER
+
+c1.r1.k1           .              .             1.0000      
+c1.r1.k2           .              .             1.0000      
+c1.r1.k3           .              .             1.0000      
+c1.r1.k4           .              .             1.0000      
+c1.r1.k5           .              .             1.0000      
+c1.r1.k6           .              .             1.0000      
+c1.r1.k7           .              .             1.0000      
+c1.r1.k8           .              .             1.0000      
+c1.r1.k9           .              .             1.0000      
+c1.r1.k10          .             1.0000         1.0000      
+c1.r1.k11          .              .             1.0000      
+c1.r1.k12          .              .             1.0000      
+c1.r1.k13          .              .             1.0000      
+c1.r1.k14          .              .             1.0000      
+c1.r1.k15          .              .             1.0000      
+c1.r1.k16          .              .             1.0000      
+c1.r1.k17          .              .             1.0000      
+c1.r1.k18          .              .             1.0000      
+c1.r1.k19          .              .             1.0000      
+c1.r1.k20          .              .             1.0000      
+c1.r2.k1           .             1.0000         1.0000      
+c1.r2.k2           .              .             1.0000      
+c1.r2.k3           .              .             1.0000      
+c1.r2.k4           .              .             1.0000      
+c1.r2.k5           .              .             1.0000      
+c1.r2.k6           .              .             1.0000      
+c1.r2.k7           .              .             1.0000      
+c1.r2.k8           .              .             1.0000      
+c1.r2.k9           .              .             1.0000      
+c1.r2.k10          .              .             1.0000      
+c1.r2.k11          .              .             1.0000      
+c1.r2.k12          .              .             1.0000      
+c1.r2.k13          .              .             1.0000      
+c1.r2.k14          .              .             1.0000      
+c1.r2.k15          .              .             1.0000      
+c1.r2.k16          .              .             1.0000      
+c1.r2.k17          .              .             1.0000      
+c1.r2.k18          .              .             1.0000      
+c1.r2.k19          .              .             1.0000      
+c1.r2.k20          .              .             1.0000      
+c1.r3.k1           .              .             1.0000      
+c1.r3.k2           .              .             1.0000      
+c1.r3.k3           .              .             1.0000      
+c1.r3.k4           .              .             1.0000      
+c1.r3.k5           .              .             1.0000      
+c1.r3.k6           .              .             1.0000      
+c1.r3.k7           .              .             1.0000      
+c1.r3.k8           .              .             1.0000      
+c1.r3.k9           .              .             1.0000      
+c1.r3.k10          .              .             1.0000      
+c1.r3.k11          .              .             1.0000      
+c1.r3.k12          .              .             1.0000      
+c1.r3.k13          .              .             1.0000      
+c1.r3.k14          .              .             1.0000      
+c1.r3.k15          .              .             1.0000      
+c1.r3.k16          .              .             1.0000      
+c1.r3.k17          .              .             1.0000      
+c1.r3.k18          .              .             1.0000      
+c1.r3.k19          .              .             1.0000      
+c1.r3.k20          .              .             1.0000      
+c1.r4.k1           .              .             1.0000      
+c1.r4.k2           .              .             1.0000      
+c1.r4.k3           .              .             1.0000      
+c1.r4.k4           .              .             1.0000      
+c1.r4.k5           .              .             1.0000      
+c1.r4.k6           .              .             1.0000      
+c1.r4.k7           .              .             1.0000      
+c1.r4.k8           .              .             1.0000      
+c1.r4.k9           .              .             1.0000      
+c1.r4.k10          .              .             1.0000      
+c1.r4.k11          .              .             1.0000      
+c1.r4.k12          .              .             1.0000      
+c1.r4.k13          .              .             1.0000      
+c1.r4.k14          .              .             1.0000      
+c1.r4.k15          .              .             1.0000      
+c1.r4.k16          .              .             1.0000      
+c1.r4.k17          .              .             1.0000      
+c1.r4.k18          .              .             1.0000      
+c1.r4.k19          .              .             1.0000      
+c1.r4.k20          .              .             1.0000      
+c1.r5.k1           .              .             1.0000      
+c1.r5.k2           .              .             1.0000      
+c1.r5.k3           .              .             1.0000      
+c1.r5.k4           .              .             1.0000      
+c1.r5.k5           .              .             1.0000      
+c1.r5.k6           .              .             1.0000      
+c1.r5.k7           .              .             1.0000      
+c1.r5.k8           .              .             1.0000      
+c1.r5.k9           .              .             1.0000      
+c1.r5.k10          .              .             1.0000      
+c1.r5.k11          .              .             1.0000      
+c1.r5.k12          .              .             1.0000      
+c1.r5.k13          .              .             1.0000      
+c1.r5.k14          .              .             1.0000      
+c1.r5.k15          .              .             1.0000      
+c1.r5.k16          .              .             1.0000      
+c1.r5.k17          .              .             1.0000      
+c1.r5.k18          .              .             1.0000      
+c1.r5.k19          .              .             1.0000      
+c1.r5.k20          .              .             1.0000      
+c2.r1.k1           .              .             1.0000      
+c2.r1.k2           .              .             1.0000      
+c2.r1.k3           .              .             1.0000      
+c2.r1.k4           .              .             1.0000      
+c2.r1.k5           .              .             1.0000      
+c2.r1.k6           .              .             1.0000      
+c2.r1.k7           .             1.0000         1.0000      
+c2.r1.k8           .              .             1.0000      
+c2.r1.k9           .              .             1.0000      
+c2.r1.k10          .              .             1.0000      
+c2.r1.k11          .              .             1.0000      
+c2.r1.k12          .              .             1.0000      
+c2.r1.k13          .              .             1.0000      
+c2.r1.k14          .              .             1.0000      
+c2.r1.k15          .              .             1.0000      
+c2.r1.k16          .              .             1.0000      
+c2.r1.k17          .              .             1.0000      
+c2.r1.k18          .              .             1.0000      
+c2.r1.k19          .              .             1.0000      
+c2.r1.k20          .              .             1.0000      
+c2.r2.k1           .              .             1.0000      
+c2.r2.k2           .             1.0000         1.0000      
+c2.r2.k3           .              .             1.0000      
+c2.r2.k4           .              .             1.0000      
+c2.r2.k5           .              .             1.0000      
+c2.r2.k6           .              .             1.0000      
+c2.r2.k7           .              .             1.0000      
+c2.r2.k8           .              .             1.0000      
+c2.r2.k9           .              .             1.0000      
+c2.r2.k10          .              .             1.0000      
+c2.r2.k11          .              .             1.0000      
+c2.r2.k12          .              .             1.0000      
+c2.r2.k13          .              .             1.0000      
+c2.r2.k14          .              .             1.0000      
+c2.r2.k15          .              .             1.0000      
+c2.r2.k16          .              .             1.0000      
+c2.r2.k17          .              .             1.0000      
+c2.r2.k18          .              .             1.0000      
+c2.r2.k19          .              .             1.0000      
+c2.r2.k20          .              .             1.0000      
+c2.r3.k1           .              .             1.0000      
+c2.r3.k2           .              .             1.0000      
+c2.r3.k3           .              .             1.0000      
+c2.r3.k4           .             1.0000         1.0000      
+c2.r3.k5           .              .             1.0000      
+c2.r3.k6           .              .             1.0000      
+c2.r3.k7           .              .             1.0000      
+c2.r3.k8           .              .             1.0000      
+c2.r3.k9           .              .             1.0000      
+c2.r3.k10          .              .             1.0000      
+c2.r3.k11          .              .             1.0000      
+c2.r3.k12          .              .             1.0000      
+c2.r3.k13          .              .             1.0000      
+c2.r3.k14          .              .             1.0000      
+c2.r3.k15          .              .             1.0000      
+c2.r3.k16          .              .             1.0000      
+c2.r3.k17          .              .             1.0000      
+c2.r3.k18          .              .             1.0000      
+c2.r3.k19          .              .             1.0000      
+c2.r3.k20          .              .             1.0000      
+c2.r4.k1           .              .             1.0000      
+c2.r4.k2           .              .             1.0000      
+c2.r4.k3           .              .             1.0000      
+c2.r4.k4           .             1.0000         1.0000      
+c2.r4.k5           .              .             1.0000      
+c2.r4.k6           .              .             1.0000      
+c2.r4.k7           .              .             1.0000      
+c2.r4.k8           .              .             1.0000      
+c2.r4.k9           .              .             1.0000      
+c2.r4.k10          .              .             1.0000      
+c2.r4.k11          .              .             1.0000      
+c2.r4.k12          .              .             1.0000      
+c2.r4.k13          .              .             1.0000      
+c2.r4.k14          .              .             1.0000      
+c2.r4.k15          .              .             1.0000      
+c2.r4.k16          .              .             1.0000      
+c2.r4.k17          .              .             1.0000      
+c2.r4.k18          .              .             1.0000      
+c2.r4.k19          .              .             1.0000      
+c2.r4.k20          .              .             1.0000      
+c2.r5.k1           .              .             1.0000      
+c2.r5.k2           .              .             1.0000      
+c2.r5.k3           .              .             1.0000      
+c2.r5.k4           .              .             1.0000      
+c2.r5.k5           .              .             1.0000      
+c2.r5.k6           .              .             1.0000      
+c2.r5.k7           .              .             1.0000      
+c2.r5.k8           .              .             1.0000      
+c2.r5.k9           .             1.0000         1.0000      
+c2.r5.k10          .              .             1.0000      
+c2.r5.k11          .              .             1.0000      
+c2.r5.k12          .              .             1.0000      
+c2.r5.k13          .              .             1.0000      
+c2.r5.k14          .              .             1.0000      
+c2.r5.k15          .              .             1.0000      
+c2.r5.k16          .              .             1.0000      
+c2.r5.k17          .              .             1.0000      
+c2.r5.k18          .              .             1.0000      
+c2.r5.k19          .              .             1.0000      
+c2.r5.k20          .              .             1.0000      
+c3.r1.k1           .              .             1.0000      
+c3.r1.k2           .              .             1.0000      
+c3.r1.k3           .             1.0000         1.0000      
+c3.r1.k4           .              .             1.0000      
+c3.r1.k5           .              .             1.0000      
+c3.r1.k6           .              .             1.0000      
+c3.r1.k7           .              .             1.0000      
+c3.r1.k8           .              .             1.0000      
+c3.r1.k9           .              .             1.0000      
+c3.r1.k10          .              .             1.0000      
+c3.r1.k11          .              .             1.0000      
+c3.r1.k12          .              .             1.0000      
+c3.r1.k13          .              .             1.0000      
+c3.r1.k14          .              .             1.0000      
+c3.r1.k15          .              .             1.0000      
+c3.r1.k16          .              .             1.0000      
+c3.r1.k17          .              .             1.0000      
+c3.r1.k18          .              .             1.0000      
+c3.r1.k19          .              .             1.0000      
+c3.r1.k20          .              .             1.0000      
+c3.r2.k1           .             1.0000         1.0000      
+c3.r2.k2           .              .             1.0000      
+c3.r2.k3           .              .             1.0000      
+c3.r2.k4           .              .             1.0000      
+c3.r2.k5           .              .             1.0000      
+c3.r2.k6           .              .             1.0000      
+c3.r2.k7           .              .             1.0000      
+c3.r2.k8           .              .             1.0000      
+c3.r2.k9           .              .             1.0000      
+c3.r2.k10          .              .             1.0000      
+c3.r2.k11          .              .             1.0000      
+c3.r2.k12          .              .             1.0000      
+c3.r2.k13          .              .             1.0000      
+c3.r2.k14          .              .             1.0000      
+c3.r2.k15          .              .             1.0000      
+c3.r2.k16          .              .             1.0000      
+c3.r2.k17          .              .             1.0000      
+c3.r2.k18          .              .             1.0000      
+c3.r2.k19          .              .             1.0000      
+c3.r2.k20          .              .             1.0000      
+c3.r3.k1           .              .             1.0000      
+c3.r3.k2           .              .             1.0000      
+c3.r3.k3           .              .             1.0000      
+c3.r3.k4           .              .             1.0000      
+c3.r3.k5           .              .             1.0000      
+c3.r3.k6           .              .             1.0000      
+c3.r3.k7           .              .             1.0000      
+c3.r3.k8           .              .             1.0000      
+c3.r3.k9           .              .             1.0000      
+c3.r3.k10          .              .             1.0000      
+c3.r3.k11          .              .             1.0000      
+c3.r3.k12          .              .             1.0000      
+c3.r3.k13          .              .             1.0000      
+c3.r3.k14          .              .             1.0000      
+c3.r3.k15          .              .             1.0000      
+c3.r3.k16          .              .             1.0000      
+c3.r3.k17          .              .             1.0000      
+c3.r3.k18          .              .             1.0000      
+c3.r3.k19          .              .             1.0000      
+c3.r3.k20          .              .             1.0000      
+c3.r4.k1           .              .             1.0000      
+c3.r4.k2           .              .             1.0000      
+c3.r4.k3           .              .             1.0000      
+c3.r4.k4           .              .             1.0000      
+c3.r4.k5           .              .             1.0000      
+c3.r4.k6           .              .             1.0000      
+c3.r4.k7           .              .             1.0000      
+c3.r4.k8           .              .             1.0000      
+c3.r4.k9           .              .             1.0000      
+c3.r4.k10          .              .             1.0000      
+c3.r4.k11          .              .             1.0000      
+c3.r4.k12          .              .             1.0000      
+c3.r4.k13          .              .             1.0000      
+c3.r4.k14          .              .             1.0000      
+c3.r4.k15          .              .             1.0000      
+c3.r4.k16          .              .             1.0000      
+c3.r4.k17          .              .             1.0000      
+c3.r4.k18          .              .             1.0000      
+c3.r4.k19          .              .             1.0000      
+c3.r4.k20          .              .             1.0000      
+c3.r5.k1           .              .             1.0000      
+c3.r5.k2           .              .             1.0000      
+c3.r5.k3           .              .             1.0000      
+c3.r5.k4           .              .             1.0000      
+c3.r5.k5           .             1.0000         1.0000      
+c3.r5.k6           .              .             1.0000      
+c3.r5.k7           .              .             1.0000      
+c3.r5.k8           .              .             1.0000      
+c3.r5.k9           .              .             1.0000      
+c3.r5.k10          .              .             1.0000      
+c3.r5.k11          .              .             1.0000      
+c3.r5.k12          .              .             1.0000      
+c3.r5.k13          .              .             1.0000      
+c3.r5.k14          .              .             1.0000      
+c3.r5.k15          .              .             1.0000      
+c3.r5.k16          .              .             1.0000      
+c3.r5.k17          .              .             1.0000      
+c3.r5.k18          .              .             1.0000      
+c3.r5.k19          .              .             1.0000      
+c3.r5.k20          .              .             1.0000      
+c4.r1.k1           .              .             1.0000      
+c4.r1.k2           .              .             1.0000      
+c4.r1.k3           .              .             1.0000      
+c4.r1.k4           .              .             1.0000      
+c4.r1.k5           .              .             1.0000      
+c4.r1.k6           .              .             1.0000      
+c4.r1.k7           .              .             1.0000      
+c4.r1.k8           .             1.0000         1.0000      
+c4.r1.k9           .              .             1.0000      
+c4.r1.k10          .              .             1.0000      
+c4.r1.k11          .              .             1.0000      
+c4.r1.k12          .              .             1.0000      
+c4.r1.k13          .              .             1.0000      
+c4.r1.k14          .              .             1.0000      
+c4.r1.k15          .              .             1.0000      
+c4.r1.k16          .              .             1.0000      
+c4.r1.k17          .              .             1.0000      
+c4.r1.k18          .              .             1.0000      
+c4.r1.k19          .              .             1.0000      
+c4.r1.k20          .              .             1.0000      
+c4.r2.k1           .              .             1.0000      
+c4.r2.k2           .              .             1.0000      
+c4.r2.k3           .              .             1.0000      
+c4.r2.k4           .             1.0000         1.0000      
+c4.r2.k5           .              .             1.0000      
+c4.r2.k6           .              .             1.0000      
+c4.r2.k7           .              .             1.0000      
+c4.r2.k8           .              .             1.0000      
+c4.r2.k9           .              .             1.0000      
+c4.r2.k10          .              .             1.0000      
+c4.r2.k11          .              .             1.0000      
+c4.r2.k12          .              .             1.0000      
+c4.r2.k13          .              .             1.0000      
+c4.r2.k14          .              .             1.0000      
+c4.r2.k15          .              .             1.0000      
+c4.r2.k16          .              .             1.0000      
+c4.r2.k17          .              .             1.0000      
+c4.r2.k18          .              .             1.0000      
+c4.r2.k19          .              .             1.0000      
+c4.r2.k20          .              .             1.0000      
+c4.r3.k1           .              .             1.0000      
+c4.r3.k2           .              .             1.0000      
+c4.r3.k3           .              .             1.0000      
+c4.r3.k4           .              .             1.0000      
+c4.r3.k5           .              .             1.0000      
+c4.r3.k6           .              .             1.0000      
+c4.r3.k7           .              .             1.0000      
+c4.r3.k8           .              .             1.0000      
+c4.r3.k9           .              .             1.0000      
+c4.r3.k10          .              .             1.0000      
+c4.r3.k11          .             1.0000         1.0000      
+c4.r3.k12          .              .             1.0000      
+c4.r3.k13          .              .             1.0000      
+c4.r3.k14          .              .             1.0000      
+c4.r3.k15          .              .             1.0000      
+c4.r3.k16          .              .             1.0000      
+c4.r3.k17          .              .             1.0000      
+c4.r3.k18          .              .             1.0000      
+c4.r3.k19          .              .             1.0000      
+c4.r3.k20          .              .             1.0000      
+c4.r4.k1           .              .             1.0000      
+c4.r4.k2           .              .             1.0000      
+c4.r4.k3           .              .             1.0000      
+c4.r4.k4           .              .             1.0000      
+c4.r4.k5           .              .             1.0000      
+c4.r4.k6           .             1.0000         1.0000      
+c4.r4.k7           .              .             1.0000      
+c4.r4.k8           .              .             1.0000      
+c4.r4.k9           .              .             1.0000      
+c4.r4.k10          .              .             1.0000      
+c4.r4.k11          .              .             1.0000      
+c4.r4.k12          .              .             1.0000      
+c4.r4.k13          .              .             1.0000      
+c4.r4.k14          .              .             1.0000      
+c4.r4.k15          .              .             1.0000      
+c4.r4.k16          .              .             1.0000      
+c4.r4.k17          .              .             1.0000      
+c4.r4.k18          .              .             1.0000      
+c4.r4.k19          .              .             1.0000      
+c4.r4.k20          .              .             1.0000      
+c4.r5.k1           .             1.0000         1.0000      
+c4.r5.k2           .              .             1.0000      
+c4.r5.k3           .              .             1.0000      
+c4.r5.k4           .              .             1.0000      
+c4.r5.k5           .              .             1.0000      
+c4.r5.k6           .              .             1.0000      
+c4.r5.k7           .              .             1.0000      
+c4.r5.k8           .              .             1.0000      
+c4.r5.k9           .              .             1.0000      
+c4.r5.k10          .              .             1.0000      
+c4.r5.k11          .              .             1.0000      
+c4.r5.k12          .              .             1.0000      
+c4.r5.k13          .              .             1.0000      
+c4.r5.k14          .              .             1.0000      
+c4.r5.k15          .              .             1.0000      
+c4.r5.k16          .              .             1.0000      
+c4.r5.k17          .              .             1.0000      
+c4.r5.k18          .              .             1.0000      
+c4.r5.k19          .              .             1.0000      
+c4.r5.k20          .              .             1.0000      
+
+---- VAR y  1 if denomination k appears
+
+           LOWER          LEVEL          UPPER
+
+k1           .             1.0000         1.0000      
+k2           .             1.0000         1.0000      
+k3           .             1.0000         1.0000      
+k4           .             1.0000         1.0000      
+k5           .             1.0000         1.0000      
+k6           .             1.0000         1.0000      
+k7           .             1.0000         1.0000      
+k8           .             1.0000         1.0000      
+k9           .             1.0000         1.0000      
+k10          .             1.0000         1.0000      
+k11          .             1.0000         1.0000      
+k12          .              .             1.0000      
+k13          .              .             1.0000      
+k14          .              .             1.0000      
+k15          .              .             1.0000      
+k16          .              .             1.0000      
+k17          .              .             1.0000      
+k18          .              .             1.0000      
+k19          .              .             1.0000      
+k20          .              .             1.0000      
+
+---- VAR p  1 if CR and CCRR are occupied and first precedes second
+
+                   LOWER          LEVEL          UPPER
+
+c1.r1.c1.r2          .              .             1.0000      
+c1.r1.c2.r1          .              .             1.0000      
+c1.r1.c2.r2          .              .             1.0000      
+c1.r2.c1.r1          .             1.0000         1.0000      
+c1.r2.c1.r3          .              .             1.0000      
+c1.r2.c2.r1          .             1.0000         1.0000      
+c1.r2.c2.r2          .             1.0000         1.0000      
+c1.r2.c2.r3          .             1.0000         1.0000      
+c1.r3.c1.r2          .              .             1.0000      
+c1.r3.c1.r4          .              .             1.0000      
+c1.r3.c2.r2          .              .             1.0000      
+c1.r3.c2.r3          .              .             1.0000      
+c1.r3.c2.r4          .              .             1.0000      
+c1.r4.c1.r3          .              .             1.0000      
+c1.r4.c1.r5          .              .             1.0000      
+c1.r4.c2.r3          .              .             1.0000      
+c1.r4.c2.r4          .              .             1.0000      
+c1.r4.c2.r5          .              .             1.0000      
+c1.r5.c1.r4          .              .             1.0000      
+c1.r5.c2.r4          .              .             1.0000      
+c1.r5.c2.r5          .              .             1.0000      
+c2.r1.c1.r1          .             1.0000         1.0000      
+c2.r1.c1.r2          .              .             1.0000      
+c2.r1.c2.r2          .              .             1.0000      
+c2.r1.c3.r1          .              .             1.0000      
+c2.r1.c3.r2          .              .             1.0000      
+c2.r2.c1.r1          .             1.0000         1.0000      
+c2.r2.c1.r2          .              .             1.0000      
+c2.r2.c1.r3          .              .             1.0000      
+c2.r2.c2.r1          .             1.0000         1.0000      
+c2.r2.c2.r3          .             1.0000         1.0000      
+c2.r2.c3.r1          .             1.0000         1.0000      
+c2.r2.c3.r2          .              .             1.0000      
+c2.r2.c3.r3          .              .             1.0000      
+c2.r3.c1.r2          .              .             1.0000      
+c2.r3.c1.r3          .              .             1.0000      
+c2.r3.c1.r4          .              .             1.0000      
+c2.r3.c2.r2          .              .             1.0000      
+c2.r3.c2.r4          .             1.0000         1.0000      
+c2.r3.c3.r2          .              .             1.0000      
+c2.r3.c3.r3          .              .             1.0000      
+c2.r3.c3.r4          .              .             1.0000      
+c2.r4.c1.r3          .              .             1.0000      
+c2.r4.c1.r4          .              .             1.0000      
+c2.r4.c1.r5          .              .             1.0000      
+c2.r4.c2.r3          .              .             1.0000      
+c2.r4.c2.r5          .             1.0000         1.0000      
+c2.r4.c3.r3          .              .             1.0000      
+c2.r4.c3.r4          .              .             1.0000      
+c2.r4.c3.r5          .             1.0000         1.0000      
+c2.r5.c1.r4          .              .             1.0000      
+c2.r5.c1.r5          .              .             1.0000      
+c2.r5.c2.r4          .              .             1.0000      
+c2.r5.c3.r4          .              .             1.0000      
+c2.r5.c3.r5          .              .             1.0000      
+c3.r1.c2.r1          .             1.0000         1.0000      
+c3.r1.c2.r2          .              .             1.0000      
+c3.r1.c3.r2          .              .             1.0000      
+c3.r1.c4.r1          .             1.0000         1.0000      
+c3.r1.c4.r2          .             1.0000         1.0000      
+c3.r2.c2.r1          .             1.0000         1.0000      
+c3.r2.c2.r2          .             1.0000         1.0000      
+c3.r2.c2.r3          .             1.0000         1.0000      
+c3.r2.c3.r1          .             1.0000         1.0000      
+c3.r2.c3.r3          .              .             1.0000      
+c3.r2.c4.r1          .             1.0000         1.0000      
+c3.r2.c4.r2          .             1.0000         1.0000      
+c3.r2.c4.r3          .             1.0000         1.0000      
+c3.r3.c2.r2          .              .             1.0000      
+c3.r3.c2.r3          .              .             1.0000      
+c3.r3.c2.r4          .              .             1.0000      
+c3.r3.c3.r2          .              .             1.0000      
+c3.r3.c3.r4          .              .             1.0000      
+c3.r3.c4.r2          .              .             1.0000      
+c3.r3.c4.r3          .              .             1.0000      
+c3.r3.c4.r4          .              .             1.0000      
+c3.r4.c2.r3          .              .             1.0000      
+c3.r4.c2.r4          .              .             1.0000      
+c3.r4.c2.r5          .              .             1.0000      
+c3.r4.c3.r3          .              .             1.0000      
+c3.r4.c3.r5          .              .             1.0000      
+c3.r4.c4.r3          .              .             1.0000      
+c3.r4.c4.r4          .              .             1.0000      
+c3.r4.c4.r5          .              .             1.0000      
+c3.r5.c2.r4          .              .             1.0000      
+c3.r5.c2.r5          .             1.0000         1.0000      
+c3.r5.c3.r4          .              .             1.0000      
+c3.r5.c4.r4          .             1.0000         1.0000      
+c3.r5.c4.r5          .              .             1.0000      
+c4.r1.c3.r1          .              .             1.0000      
+c4.r1.c3.r2          .              .             1.0000      
+c4.r1.c4.r2          .              .             1.0000      
+c4.r2.c3.r1          .              .             1.0000      
+c4.r2.c3.r2          .              .             1.0000      
+c4.r2.c3.r3          .              .             1.0000      
+c4.r2.c4.r1          .             1.0000         1.0000      
+c4.r2.c4.r3          .             1.0000         1.0000      
+c4.r3.c3.r2          .              .             1.0000      
+c4.r3.c3.r3          .              .             1.0000      
+c4.r3.c3.r4          .              .             1.0000      
+c4.r3.c4.r2          .              .             1.0000      
+c4.r3.c4.r4          .              .             1.0000      
+c4.r4.c3.r3          .              .             1.0000      
+c4.r4.c3.r4          .              .             1.0000      
+c4.r4.c3.r5          .              .             1.0000      
+c4.r4.c4.r3          .             1.0000         1.0000      
+c4.r4.c4.r5          .              .             1.0000      
+c4.r5.c3.r4          .              .             1.0000      
+c4.r5.c3.r5          .             1.0000         1.0000      
+c4.r5.c4.r4          .             1.0000         1.0000      
+
+---- VAR z  occupied-cell indicator
+
+             LOWER          LEVEL          UPPER
+
+c1.r1          .             1.0000         1.0000      
+c1.r2          .             1.0000         1.0000      
+c1.r3          .              .             1.0000      
+c1.r4          .              .             1.0000      
+c1.r5          .              .             1.0000      
+c2.r1          .             1.0000         1.0000      
+c2.r2          .             1.0000         1.0000      
+c2.r3          .             1.0000         1.0000      
+c2.r4          .             1.0000         1.0000      
+c2.r5          .             1.0000         1.0000      
+c3.r1          .             1.0000         1.0000      
+c3.r2          .             1.0000         1.0000      
+c3.r3          .              .             1.0000      
+c3.r4          .              .             1.0000      
+c3.r5          .             1.0000         1.0000      
+c4.r1          .             1.0000         1.0000      
+c4.r2          .             1.0000         1.0000      
+c4.r3          .             1.0000         1.0000      
+c4.r4          .             1.0000         1.0000      
+c4.r5          .             1.0000         1.0000      
+
+---- VAR d  denomination at a cell
+
+             LOWER          LEVEL          UPPER
+
+c1.r1          .            10.0000        20.0000      
+c1.r2          .             1.0000        20.0000      
+c1.r3          .              .            20.0000      
+c1.r4          .              .            20.0000      
+c1.r5          .              .            20.0000      
+c2.r1          .             7.0000        20.0000      
+c2.r2          .             2.0000        20.0000      
+c2.r3          .             4.0000        20.0000      
+c2.r4          .             4.0000        20.0000      
+c2.r5          .             9.0000        20.0000      
+c3.r1          .             3.0000        20.0000      
+c3.r2          .             1.0000        20.0000      
+c3.r3          .              .            20.0000      
+c3.r4          .              .            20.0000      
+c3.r5          .             5.0000        20.0000      
+c4.r1          .             8.0000        20.0000      
+c4.r2          .             4.0000        20.0000      
+c4.r3          .            11.0000        20.0000      
+c4.r4          .             6.0000        20.0000      
+c4.r5          .             1.0000        20.0000      
+
+---- VAR tau  ordering potential
+
+             LOWER          LEVEL          UPPER
+
+c1.r1          .            19.0000        19.0000      
+c1.r2          .              .            19.0000      
+c1.r3          .              .            19.0000      
+c1.r4          .              .            19.0000      
+c1.r5          .              .            19.0000      
+c2.r1          .             3.0000        19.0000      
+c2.r2          .             1.0000        19.0000      
+c2.r3          .             2.0000        19.0000      
+c2.r4          .            16.0000        19.0000      
+c2.r5          .            18.0000        19.0000      
+c3.r1          .             2.0000        19.0000      
+c3.r2          .              .            19.0000      
+c3.r3          .              .            19.0000      
+c3.r4          .              .            19.0000      
+c3.r5          .            17.0000        19.0000      
+c4.r1          .            19.0000        19.0000      
+c4.r2          .             3.0000        19.0000      
+c4.r3          .            19.0000        19.0000      
+c4.r4          .            18.0000        19.0000      
+c4.r5          .              .            19.0000      
+
+---- VAR w  denomination contributed by first cell to second cell
+
+                   LOWER          LEVEL          UPPER
+
+c1.r1.c1.r2          .              .            20.0000      
+c1.r1.c2.r1          .              .            20.0000      
+c1.r1.c2.r2          .              .            20.0000      
+c1.r2.c1.r1          .             1.0000        20.0000      
+c1.r2.c1.r3          .              .            20.0000      
+c1.r2.c2.r1          .             1.0000        20.0000      
+c1.r2.c2.r2          .             1.0000        20.0000      
+c1.r2.c2.r3          .             1.0000        20.0000      
+c1.r3.c1.r2          .              .            20.0000      
+c1.r3.c1.r4          .              .            20.0000      
+c1.r3.c2.r2          .              .            20.0000      
+c1.r3.c2.r3          .              .            20.0000      
+c1.r3.c2.r4          .              .            20.0000      
+c1.r4.c1.r3          .              .            20.0000      
+c1.r4.c1.r5          .              .            20.0000      
+c1.r4.c2.r3          .              .            20.0000      
+c1.r4.c2.r4          .              .            20.0000      
+c1.r4.c2.r5          .              .            20.0000      
+c1.r5.c1.r4          .              .            20.0000      
+c1.r5.c2.r4          .              .            20.0000      
+c1.r5.c2.r5          .              .            20.0000      
+c2.r1.c1.r1          .             7.0000        20.0000      
+c2.r1.c1.r2          .              .            20.0000      
+c2.r1.c2.r2          .              .            20.0000      
+c2.r1.c3.r1          .              .            20.0000      
+c2.r1.c3.r2          .              .            20.0000      
+c2.r2.c1.r1          .             2.0000        20.0000      
+c2.r2.c1.r2          .              .            20.0000      
+c2.r2.c1.r3          .              .            20.0000      
+c2.r2.c2.r1          .             2.0000        20.0000      
+c2.r2.c2.r3          .             2.0000        20.0000      
+c2.r2.c3.r1          .             2.0000        20.0000      
+c2.r2.c3.r2          .              .            20.0000      
+c2.r2.c3.r3          .              .            20.0000      
+c2.r3.c1.r2          .              .            20.0000      
+c2.r3.c1.r3          .              .            20.0000      
+c2.r3.c1.r4          .              .            20.0000      
+c2.r3.c2.r2          .              .            20.0000      
+c2.r3.c2.r4          .             4.0000        20.0000      
+c2.r3.c3.r2          .              .            20.0000      
+c2.r3.c3.r3          .              .            20.0000      
+c2.r3.c3.r4          .              .            20.0000      
+c2.r4.c1.r3          .              .            20.0000      
+c2.r4.c1.r4          .              .            20.0000      
+c2.r4.c1.r5          .              .            20.0000      
+c2.r4.c2.r3          .              .            20.0000      
+c2.r4.c2.r5          .             4.0000        20.0000      
+c2.r4.c3.r3          .              .            20.0000      
+c2.r4.c3.r4          .              .            20.0000      
+c2.r4.c3.r5          .             4.0000        20.0000      
+c2.r5.c1.r4          .              .            20.0000      
+c2.r5.c1.r5          .              .            20.0000      
+c2.r5.c2.r4          .              .            20.0000      
+c2.r5.c3.r4          .              .            20.0000      
+c2.r5.c3.r5          .              .            20.0000      
+c3.r1.c2.r1          .             3.0000        20.0000      
+c3.r1.c2.r2          .              .            20.0000      
+c3.r1.c3.r2          .              .            20.0000      
+c3.r1.c4.r1          .             3.0000        20.0000      
+c3.r1.c4.r2          .             3.0000        20.0000      
+c3.r2.c2.r1          .             1.0000        20.0000      
+c3.r2.c2.r2          .             1.0000        20.0000      
+c3.r2.c2.r3          .             1.0000        20.0000      
+c3.r2.c3.r1          .             1.0000        20.0000      
+c3.r2.c3.r3          .              .            20.0000      
+c3.r2.c4.r1          .             1.0000        20.0000      
+c3.r2.c4.r2          .             1.0000        20.0000      
+c3.r2.c4.r3          .             1.0000        20.0000      
+c3.r3.c2.r2          .              .            20.0000      
+c3.r3.c2.r3          .              .            20.0000      
+c3.r3.c2.r4          .              .            20.0000      
+c3.r3.c3.r2          .              .            20.0000      
+c3.r3.c3.r4          .              .            20.0000      
+c3.r3.c4.r2          .              .            20.0000      
+c3.r3.c4.r3          .              .            20.0000      
+c3.r3.c4.r4          .              .            20.0000      
+c3.r4.c2.r3          .              .            20.0000      
+c3.r4.c2.r4          .              .            20.0000      
+c3.r4.c2.r5          .              .            20.0000      
+c3.r4.c3.r3          .              .            20.0000      
+c3.r4.c3.r5          .              .            20.0000      
+c3.r4.c4.r3          .              .            20.0000      
+c3.r4.c4.r4          .              .            20.0000      
+c3.r4.c4.r5          .              .            20.0000      
+c3.r5.c2.r4          .              .            20.0000      
+c3.r5.c2.r5          .             5.0000        20.0000      
+c3.r5.c3.r4          .              .            20.0000      
+c3.r5.c4.r4          .             5.0000        20.0000      
+c3.r5.c4.r5          .              .            20.0000      
+c4.r1.c3.r1          .              .            20.0000      
+c4.r1.c3.r2          .              .            20.0000      
+c4.r1.c4.r2          .              .            20.0000      
+c4.r2.c3.r1          .              .            20.0000      
+c4.r2.c3.r2          .              .            20.0000      
+c4.r2.c3.r3          .              .            20.0000      
+c4.r2.c4.r1          .             4.0000        20.0000      
+c4.r2.c4.r3          .             4.0000        20.0000      
+c4.r3.c3.r2          .              .            20.0000      
+c4.r3.c3.r3          .              .            20.0000      
+c4.r3.c3.r4          .              .            20.0000      
+c4.r3.c4.r2          .              .            20.0000      
+c4.r3.c4.r4          .              .            20.0000      
+c4.r4.c3.r3          .              .            20.0000      
+c4.r4.c3.r4          .              .            20.0000      
+c4.r4.c3.r5          .              .            20.0000      
+c4.r4.c4.r3          .             6.0000        20.0000      
+c4.r4.c4.r5          .              .            20.0000      
+c4.r5.c3.r4          .              .            20.0000      
+c4.r5.c3.r5          .             1.0000        20.0000      
+c4.r5.c4.r4          .             1.0000        20.0000      
+
+                           LOWER          LEVEL          UPPER
+
+---- VAR objective         -INF           11.0000        +INF         
+
+
+**** REPORT SUMMARY :        0     NONOPT
+                             0 INFEASIBLE
+                             0  UNBOUNDED
+GAMS 54.2.1  d9889eb3 Jul 13, 2026          WEX-WEI x86 64bit/MS Windows - 08/04/26 23:30:07 Page 5
+Denomination puzzle: exact MILP formulation
+E x e c u t i o n
+
+
+----    287 MODEL denomination.ModelStat   =        7.000  
+            MODEL denomination.SolveStat   =        3.000  
+            VARIABLE objective.L           =       11.000  
+            PARAMETER article3x3Claim      =        0.000  
+            PARAMETER article3x3Match      =        1.000  
+
+----    287 PARAMETER delta  number of king-graph neighbors
+
+            r1          r2          r3          r4          r5
+
+c1       3.000       5.000       5.000       5.000       3.000
+c2       5.000       8.000       8.000       8.000       5.000
+c3       5.000       8.000       8.000       8.000       5.000
+c4       3.000       5.000       5.000       5.000       3.000
+
+
+----    287 PARAMETER bigM  neighborhood big-M value
+
+            r1          r2          r3          r4          r5
+
+c1      60.000     100.000     100.000     100.000      60.000
+c2     100.000     160.000     160.000     160.000     100.000
+c3     100.000     160.000     160.000     160.000     100.000
+c4      60.000     100.000     100.000     100.000      60.000
+
+
+----    287 PARAMETER board  final denomination
+
+            r1          r2          r3          r4          r5
+
+c1      10.000       1.000
+c2       7.000       2.000       4.000       4.000       9.000
+c3       3.000       1.000                               5.000
+c4       8.000       4.000      11.000       6.000       1.000
+
+
+----    287 PARAMETER stepOf  reconstructed placement step
+
+            r1          r2          r3          r4          r5
+
+c1      14.000       1.000
+c2      11.000       4.000       6.000       8.000      13.000
+c3       5.000       2.000                               9.000
+c4      12.000       7.000      15.000      10.000       3.000
+
+
+----    287 VARIABLE tau.L  ordering potential
+
+            r1          r2          r3          r4          r5
+
+c1      19.000
+c2       3.000       1.000       2.000      16.000      18.000
+c3       2.000                                          17.000
+c4      19.000       3.000      19.000      18.000
+
+
+----    287 PARAMETER predecessorSum  
+
+            r1          r2          r3          r4          r5
+
+c1      10.000
+c2       7.000       2.000       4.000       4.000       9.000
+c3       3.000                                           5.000
+c4       8.000       4.000      11.000       6.000
+
+
+----    287 PARAMETER cellResidual  
+
+                      ( ALL       0.000 )
+
+
+**** REPORT FILE SUMMARY
+
+boardOut C:\Users\bisma\Dropbox\Apps\Overleaf\Parth ITED\Gams\denomination_board.csv
+sequenceOut C:\Users\bisma\Dropbox\Apps\Overleaf\Parth ITED\Gams\denomination_sequence.csv
+arcOut C:\Users\bisma\Dropbox\Apps\Overleaf\Parth ITED\Gams\denomination_arcs.csv
+
+
+EXECUTION TIME       =     3601.063 SECONDS      7 MB  54.2.1 d9889eb3 WEX-WEI
+
+
+USER: Bismark Singh, Single User License             G250916+0003Ac-WIN
+      University of Southampton, Centre for Operational ResearchDC16809
+      License for teaching and research at degree granting institutions
+
+
+**** FILE SUMMARY
+
+Input      C:\Users\bisma\Dropbox\Apps\Overleaf\Parth ITED\Gams\denomination.gms
+Output     C:\Users\bisma\Dropbox\Apps\Overleaf\Parth ITED\Gams\denomination.lst
