@@ -2,9 +2,9 @@
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 
-This project contains the code used in the article **Denomination: A Placement Puzzle for
+This project contains supplementary material for the article **Denomination: A Placement Puzzle for
 Teaching Integer Programming and Graph-Based Modeling** by **Parth Sarda** and **Bismark
-Singh**, submitted to *INFORMS Transactions on Education*. We provide the implementations
+Singh**, currently under peer-review. Specifically, we provide the implementations
 of the exact mixed-integer linear programming (MILP) formulation discussed in the article,
 an independent enumerator used to verify optimal $k_{\max}$ values, and an interactive
 Pygame implementation of the puzzle for classroom use.
