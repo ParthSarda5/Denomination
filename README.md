@@ -59,22 +59,12 @@ The repository is structured as follows:
     adjacency, the rectangle's symmetry group (used to deduplicate reachable states in
     `bruteforce.py`), board rendering, and the `data/kmax_table.csv` loader.
   - `main.py`: a concrete example of how to run the code end to end (see below).
-- `Gams`: 
+- `GAMS`: 
   - `denomination_arcs.csv`: 
   - `denomination_board.csv`:
   - `denomination_sequence.csv`:
   - `denomination_game.py`:
   - `denomination.gms`:
-  - `denomination.lst`:
-  - `denomination.lxi`:
-  - `denomination.~log`:
-  - `denomination.log~1`:
-  - `denomination.log~2`:
-  - `denomination.log~3`:
-  
-
-
-
 
 ## Example
 
