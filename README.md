@@ -9,6 +9,14 @@ of the exact mixed-integer linear programming (MILP) formulation discussed in th
 an independent enumerator used to verify optimal $k_{\max}$ values, and an interactive
 Pygame implementation of the puzzle for classroom use.
 
+**Denomination** is based on the **Stepping Stones** puzzle introduced by Thomas Ladouceur and Jeremy Rebenstock. In the original puzzle, stones are placed sequentially on a grid, with each new value determined by the values of neighboring stones already present. The problem has attracted considerable attention in recreational mathematics and computational experimentation, see, e.g.,
+- **N. J. A. Sloane**, ["A Handbook of Integer Sequences" Fifty Years Later](https://doi.org/10.1007/s00283-023-10266-6), *The Mathematical Intelligencer* (2023), discusses the Stepping Stones problem and its development.
+- [**OEIS A337663**](https://oeis.org/A337663) records the original Stepping Stones sequence, computational results, constructions, bounds, and related implementations.
+- [**OEIS A350764**](https://oeis.org/A350764) considers finite rectangular grids and records optimal values for several small grid sizes.
+- Numberphile presents an accessible introduction in [**Stones on an Infinite Chessboard**](https://www.youtube.com/watch?v=m4Uth-EaTZ8).
+
+Much of the previous work approaches Stepping Stones through combinatorial reasoning and enumeration. Rather than seeking improved record values, our focus is on showing how the sequential placement rules can be represented explicitly using mathematical optimization.
+
 ## Requirements for running the code
 
 Before running the code, make sure you have the below installed:
